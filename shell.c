@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
+#include <unistd.h>
 
 #define MAX_COMMAND_LENGTH 1024
 #define MAX_ARG_COUNT 10
@@ -25,6 +27,11 @@ int last_exit_status = 0;
 void print_status()
 {
     printf("Last command exit status: %d\n", last_exit_status);
+}
+
+void handle_sigint(int sig)
+{
+    printf("\nYou typed Control-C!");
 }
 
 void parse_command(char *command, char **argv1, char **argv2, int *piping)
@@ -110,12 +117,16 @@ int main()
     // Save the original stderr file descriptor
     int original_stderr = dup(STDERR_FILENO);
 
+    // Register the signal handler for SIGINT
+    signal(SIGINT, handle_sigint);
+
     while (1)
     {
+
         printf("%s: ", prompt_name);
         if (fgets(command, sizeof(command), stdin) == NULL)
         {
-            perror("fgets failed");
+            // perror("fgets failed");
             continue;
         }
         command[strlen(command) - 1] = '\0'; // Remove trailing newline
