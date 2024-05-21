@@ -1,0 +1,14 @@
+total 60
+-rw-rw---- 1 codespace codespace     0 May 21 09:35 Ñ
+-rw-rw---- 1 codespace codespace     0 May 21 08:31 ÿÿÿÿ
+-rw-rw-rw- 1 codespace codespace   526 May 21 07:24 Makefile
+-rw-rw-rw- 1 codespace root          9 May 19 16:51 README.md
+-rw-rw---- 1 codespace codespace     0 May 21 09:36 hello2
+-rw-rw---- 1 codespace codespace   109 May 21 08:03 myerros
+-rw-rw---- 1 codespace codespace   486 May 21 09:35 mylog
+-rw-rw---- 1 codespace codespace   108 May 21 09:12 mylogs
+-rw-rw---- 1 codespace codespace   595 May 21 08:47 pop
+-rwxrwxrwx 1 codespace codespace 17512 May 21 09:34 shell
+-rw-rw-rw- 1 codespace codespace  6434 May 21 09:34 shell.c
+-rw-rw-rw- 1 codespace codespace  6736 May 21 09:34 shell.o
+-rw-rw-rw- 1 codespace codespace     0 May 21 08:47 text

@@ -47,8 +47,14 @@ int main() {
     int piping, retid, status;
     int fildes[2];
     char *outfile, *errfile;
-    int fd, fd_err, amper, redirect_out, redirect_err, redirect_out_app, prom;
-    char *prompt_name = "hello";
+    int fd, fd_err, amper, redirect_out, redirect_err, redirect_out_app;
+    char *prompt_name = malloc(strlen("hello") + 1);
+    if (prompt_name == NULL) {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    strcpy(prompt_name, "hello");
 
     // Save the original stderr file descriptor
     int original_stderr = dup(STDERR_FILENO);
@@ -70,6 +76,7 @@ int main() {
         // Check for background execution
         int argc1 = 0;
         while (argv1[argc1] != NULL) argc1++;
+
         if (argc1 > 0 && strcmp(argv1[argc1 - 1], "&") == 0) {
             amper = 1;
             argv1[argc1 - 1] = NULL;
@@ -83,7 +90,6 @@ int main() {
             argv1[argc1 - 2] = NULL;
             outfile = argv1[argc1 - 1];
         } else if (argc1 > 2 && strcmp(argv1[argc1 - 2], "2>") == 0){
-            printf('%d', argv1[argc1 - 2]);
             redirect_err = 1;
             argv1[argc1 - 2] = NULL;
             errfile = argv1[argc1 - 1];
@@ -94,22 +100,27 @@ int main() {
             outfile = argv1[argc1 - 1];
         }
         else if (argc1 > 2 && strcmp(argv1[argc1 - 3], "prompt") == 0 && strcmp(argv1[argc1 - 2], "=") == 0){
-            prompt_name = argv1[argc1 - 1];
-            prom = 1;
+            // Free the previously allocated memory, if any
+            free(prompt_name);
+
+            // Allocate memory for the new prompt name
+            prompt_name = malloc(strlen(argv1[argc1 - 1]) + 1);
+            if (prompt_name == NULL) {
+                perror("Memory allocation failed");
+                exit(EXIT_FAILURE);
+            }
+
+            // Copy the new prompt name
+            strcpy(prompt_name, argv1[argc1 - 1]);
+
+            continue;
         }
+
         else{
             redirect_out = 0;
             redirect_out_app = 0;
             redirect_err = 0;
-        }
-
-        // If prompt, do not fork
-        if(prom){
-            // Reset the flag after processing prompt command
-            prom = 0;
-            // Skip forking if it's a prompt command
-            continue;
-        }
+        } 
 
         // Fork and execute the command
         pid_t pid = fork();
