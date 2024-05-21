@@ -7,10 +7,15 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
-#include <unistd.h>
+#include <termios.h>
 
 #define MAX_COMMAND_LENGTH 1024
 #define MAX_ARG_COUNT 10
+#define MAX_HISTORY_SIZE 20
+#define UP_ARROW 65
+#define DOWN_ARROW 66
+#define ESCAPE_KEY 27
+#define BACKSPACE 127
 
 typedef struct
 {
@@ -24,6 +29,30 @@ int variable_count = 0;
 // Global variable to store the exit status of the last executed command
 int last_exit_status = 0;
 
+char command_history[MAX_HISTORY_SIZE][MAX_COMMAND_LENGTH];
+int history_count = 0;
+int current_history_index = -1;
+
+struct termios orig_termios;
+
+void disable_raw_mode()
+{
+    tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
+}
+
+void enable_raw_mode()
+{
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    atexit(disable_raw_mode);
+
+    struct termios raw = orig_termios;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+}
+
 void print_status()
 {
     printf("Last command exit status: %d\n", last_exit_status);
@@ -31,7 +60,7 @@ void print_status()
 
 void handle_sigint(int sig)
 {
-    printf("\nYou typed Control-C!");
+    printf("\nYou typed Control-C!\n");
 }
 
 void parse_command(char *command, char **argv1, char **argv2, int *piping)
@@ -96,9 +125,131 @@ void set_variable_value(const char *name, const char *value)
     }
 }
 
+void add_to_history(const char *command)
+{
+    if (history_count < MAX_HISTORY_SIZE)
+    {
+        strcpy(command_history[history_count], command);
+        history_count++;
+    }
+    else
+    {
+        // Shift existing history to make space for new command
+        for (int i = 0; i < MAX_HISTORY_SIZE - 1; i++)
+        {
+            strcpy(command_history[i], command_history[i + 1]);
+        }
+        strcpy(command_history[MAX_HISTORY_SIZE - 1], command);
+    }
+    current_history_index = history_count;
+}
+
+void display_command_from_history(char *command, const char *prompt_name)
+{
+    if (current_history_index >= 0 && current_history_index < history_count)
+    {
+        strcpy(command, command_history[current_history_index]);
+        printf("\r%s: %s\033[K", prompt_name, command); // Clear line after the command
+        fflush(stdout);
+    }
+}
+
+void handle_arrow_key_press(int key, char *command, const char *prompt_name)
+{
+    if (key == UP_ARROW)
+    {
+        if (current_history_index > 0)
+        {
+            current_history_index--;
+            display_command_from_history(command, prompt_name);
+        }
+    }
+    else if (key == DOWN_ARROW)
+    {
+        if (current_history_index < history_count)
+        {
+            current_history_index++;
+            if (current_history_index == history_count)
+            {
+                // Clear the line for new command
+                printf("\r%s: \033[K", prompt_name);
+                fflush(stdout);
+                command[0] = '\0'; // Clear the command buffer
+            }
+            else
+            {
+                display_command_from_history(command, prompt_name);
+            }
+        }
+    }
+}
+
+void read_input_with_history(char *command, const char *prompt_name)
+{
+    enable_raw_mode();
+    int c;
+    int pos = 0;
+    memset(command, 0, MAX_COMMAND_LENGTH);
+
+    printf("%s: ", prompt_name);
+    fflush(stdout);
+
+    while (1)
+    {
+        c = getchar();
+
+        if (c == ESCAPE_KEY)
+        {
+            if (getchar() == '[')
+            {
+                switch (getchar())
+                {
+                case 'A': // Up arrow
+                    handle_arrow_key_press(UP_ARROW, command, prompt_name);
+                    pos = strlen(command);
+                    break;
+                case 'B': // Down arrow
+                    handle_arrow_key_press(DOWN_ARROW, command, prompt_name);
+                    pos = strlen(command);
+                    break;
+                }
+            }
+        }
+        else if (c == '\n')
+        {
+            command[pos] = '\0';
+            printf("\n");
+            break;
+        }
+        else if (c == BACKSPACE)
+        {
+            if (pos > 0)
+            {
+                pos--;
+                command[pos] = '\0';
+                printf("\b \b"); // Move cursor back, print space, move cursor back again
+                fflush(stdout);
+            }
+        }
+        else
+        {
+            if (pos < MAX_COMMAND_LENGTH - 1)
+            {
+                command[pos++] = c;
+                printf("%c", c);
+                fflush(stdout);
+            }
+        }
+    }
+    disable_raw_mode();
+}
+
+
+
 int main()
 {
     char command[MAX_COMMAND_LENGTH];
+    char curr_command[MAX_COMMAND_LENGTH];
     char *argv1[MAX_ARG_COUNT], *argv2[MAX_ARG_COUNT];
     char last_command[MAX_COMMAND_LENGTH] = "";
     int piping, retid, status;
@@ -122,14 +273,7 @@ int main()
 
     while (1)
     {
-
-        printf("%s: ", prompt_name);
-        if (fgets(command, sizeof(command), stdin) == NULL)
-        {
-            // perror("fgets failed");
-            continue;
-        }
-        command[strlen(command) - 1] = '\0'; // Remove trailing newline
+        read_input_with_history(command, prompt_name);
 
         // Check for the !! command
         if (strcmp(command, "!!") == 0)
@@ -145,7 +289,7 @@ int main()
         {
             strcpy(last_command, command); // Store the current command as the last command
         }
-
+        strcpy(curr_command, command);
         parse_command(command, argv1, argv2, &piping);
 
         // Check if the command is empty
@@ -177,6 +321,8 @@ int main()
             }
         }
 
+        add_to_history(curr_command);
+
         // Check for output redirection
         if (argc1 > 2 && strcmp(argv1[argc1 - 2], ">") == 0)
         {
@@ -196,22 +342,18 @@ int main()
             argv1[argc1 - 2] = NULL;
             outfile = argv1[argc1 - 1];
         }
-        else if (argc1 > 2 && strcmp(argv1[argc1 - 3], "prompt") == 0 && strcmp(argv1[argc1 - 2], "=") == 0)
-        {
-            // Free the previously allocated memory, if any
-            free(prompt_name);
 
-            // Allocate memory for the new prompt name
+        // Check for built-in commands
+        if (argc1 > 1 && strcmp(argv1[0], "prompt") == 0)
+        {
+            free(prompt_name); // Free the previous prompt name memory
             prompt_name = malloc(strlen(argv1[argc1 - 1]) + 1);
             if (prompt_name == NULL)
             {
                 perror("Memory allocation failed");
                 exit(EXIT_FAILURE);
             }
-
-            // Copy the new prompt name
             strcpy(prompt_name, argv1[argc1 - 1]);
-
             continue;
         }
 
@@ -338,6 +480,8 @@ int main()
             else
             {
                 execvp(argv1[0], argv1);
+                perror("execvp failed");
+                exit(EXIT_FAILURE);
             }
         }
 
@@ -369,6 +513,7 @@ int main()
 
     // Close the original stderr file descriptor
     close(original_stderr);
+    free(prompt_name);
 
     return 0;
 }
