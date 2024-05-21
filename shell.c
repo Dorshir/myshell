@@ -10,6 +10,15 @@
 #define MAX_COMMAND_LENGTH 1024
 #define MAX_ARG_COUNT 10
 
+
+typedef struct {
+    char name[MAX_COMMAND_LENGTH];
+    char value[MAX_COMMAND_LENGTH];
+} Variable;
+
+Variable variables[MAX_ARG_COUNT];
+int variable_count = 0;
+
 void parse_command(char *command, char **argv1, char **argv2, int *piping) {
     char *token;
     int i = 0;
@@ -40,6 +49,26 @@ void parse_command(char *command, char **argv1, char **argv2, int *piping) {
         argv2[i] = NULL;
     }
 }
+
+char* get_variable_value(const char *name) {
+    for (int i = 0; i < variable_count; i++) {
+        if (strcmp(variables[i].name, name) == 0) {
+            return variables[i].value;
+        }
+    }
+    return NULL;
+}
+
+void set_variable_value(const char *name, const char *value) {
+    if (variable_count < MAX_ARG_COUNT) {
+        strcpy(variables[variable_count].name, name);
+        strcpy(variables[variable_count].value, value);
+        variable_count++;
+    } else {
+        fprintf(stderr, "Max variable count reached.\n");
+    }
+}
+
 
 
 int main() {
@@ -98,6 +127,15 @@ int main() {
         }
         
 
+
+        // Check for variable substitution
+        for (int i = 0; argv1[i] != NULL; i++) {
+            char *value = get_variable_value(argv1[i]);
+            if (value != NULL) {
+                argv1[i] = value;
+            }
+        }
+
         // Check for output redirection
         if (argc1 > 2 && strcmp(argv1[argc1 - 2], ">") == 0) {
             redirect_out = 1;
@@ -144,6 +182,10 @@ int main() {
         }
         else if (argc1 == 1 && strcmp(argv1[0], "quit") == 0) {
             exit(EXIT_SUCCESS);
+        }
+        else if (argc1 > 2 && strcmp(argv1[argc1 - 2], "=") == 0) {
+            set_variable_value(argv1[argc1 - 3], argv1[argc1 - 1]);
+            continue;
         }
 
         else{
