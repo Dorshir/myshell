@@ -41,6 +41,14 @@ void parse_command(char *command, char **argv1, char **argv2, int *piping) {
     }
 }
 
+int change_directory(char *path) {
+    if (chdir(path) != 0) {
+        perror("chdir failed");
+        return -1;
+    }
+    return 0;
+}
+
 int main() {
     char command[MAX_COMMAND_LENGTH];
     char *argv1[MAX_ARG_COUNT], *argv2[MAX_ARG_COUNT];
@@ -122,6 +130,13 @@ int main() {
             printf("\n");
             continue;
         }
+        else if (argc1 > 1 && strcmp(argv1[0], "cd") == 0) {
+            // if (change_directory(argv1[1]) == 0) {
+            //     printf("Directory changed to %s\n", argv1[1]);
+            // }
+            change_directory(argv1[1]);
+            continue;
+        }
 
         else{
             redirect_out = 0;
@@ -166,6 +181,7 @@ int main() {
                 dup2(fd_err, STDERR_FILENO);
                 close(fd_err);
             }
+
 
             if (piping) {
                 if (pipe(fildes) < 0) {
