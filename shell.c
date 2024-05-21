@@ -41,13 +41,6 @@ void parse_command(char *command, char **argv1, char **argv2, int *piping) {
     }
 }
 
-int change_directory(char *path) {
-    if (chdir(path) != 0) {
-        perror("chdir failed");
-        return -1;
-    }
-    return 0;
-}
 
 int main() {
     char command[MAX_COMMAND_LENGTH];
@@ -131,10 +124,9 @@ int main() {
             continue;
         }
         else if (argc1 > 1 && strcmp(argv1[0], "cd") == 0) {
-            // if (change_directory(argv1[1]) == 0) {
-            //     printf("Directory changed to %s\n", argv1[1]);
-            // }
-            change_directory(argv1[1]);
+            if (chdir(argv1[1]) != 0) {
+                perror("chdir failed");
+            }
             continue;
         }
 
