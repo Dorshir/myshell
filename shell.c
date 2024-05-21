@@ -142,6 +142,9 @@ int main() {
             }
             continue;
         }
+        else if (argc1 == 1 && strcmp(argv1[0], "quit") == 0) {
+            exit(EXIT_SUCCESS);
+        }
 
         else{
             redirect_out = 0;
