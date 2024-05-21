@@ -45,6 +45,7 @@ void parse_command(char *command, char **argv1, char **argv2, int *piping) {
 int main() {
     char command[MAX_COMMAND_LENGTH];
     char *argv1[MAX_ARG_COUNT], *argv2[MAX_ARG_COUNT];
+    char last_command[MAX_COMMAND_LENGTH] = "";
     int piping, retid, status;
     int fildes[2];
     char *outfile, *errfile;
@@ -68,6 +69,17 @@ int main() {
         }
         command[strlen(command) - 1] = '\0'; // Remove trailing newline
 
+        // Check for the !! command
+        if (strcmp(command, "!!") == 0) {
+            if (strlen(last_command) == 0) {
+                printf("No previous command to repeat.\n");
+                continue;
+            }
+            strcpy(command, last_command);
+        } else {
+            strcpy(last_command, command); // Store the current command as the last command
+        }
+
         parse_command(command, argv1, argv2, &piping);
 
         // Check if the command is empty
@@ -84,6 +96,7 @@ int main() {
         } else {
             amper = 0;
         }
+        
 
         // Check for output redirection
         if (argc1 > 2 && strcmp(argv1[argc1 - 2], ">") == 0) {
