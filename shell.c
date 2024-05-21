@@ -17,6 +17,11 @@
 #define ESCAPE_KEY 27
 #define BACKSPACE 127
 
+// Global variables to hold process IDs
+pid_t pid = -1;
+pid_t pipe_pid = -1;
+
+int flag = 1;
 typedef struct
 {
     char name[MAX_COMMAND_LENGTH];
@@ -58,9 +63,24 @@ void print_status()
     printf("Last command exit status: %d\n", last_exit_status);
 }
 
-void handle_sigint(int sig)
+void handle_sigint()
 {
     printf("\nYou typed Control-C!\n");
+    flag = 1;
+    // Check if the process IDs are valid and active
+    if (pid > 0)
+    {
+        // Kill the child process or process group
+        killpg(pid, SIGKILL);
+        printf("Stopping process with PID %d\n", pid);
+    }
+
+    if (pipe_pid > 0)
+    {
+        // Kill the child process or process group
+        killpg(pipe_pid, SIGKILL);
+        printf("Stopping process with PID %d\n", pipe_pid);
+    }
 }
 
 void parse_command(char *command, char **argv1, char **argv2, int *piping)
@@ -244,8 +264,6 @@ void read_input_with_history(char *command, const char *prompt_name)
     disable_raw_mode();
 }
 
-
-
 int main()
 {
     char command[MAX_COMMAND_LENGTH];
@@ -268,12 +286,23 @@ int main()
     // Save the original stderr file descriptor
     int original_stderr = dup(STDERR_FILENO);
 
-    // Register the signal handler for SIGINT
-    signal(SIGINT, handle_sigint);
-
     while (1)
     {
-        read_input_with_history(command, prompt_name);
+        // Register the signal handler for SIGINT
+        signal(SIGINT, handle_sigint);
+        if (flag)
+        {
+            printf("%s: ", prompt_name);
+            if (fgets(command, sizeof(command), stdin) == NULL)
+            {
+                // perror("fgets failed");
+                continue;
+            }
+            command[strlen(command) - 1] = '\0'; // Remove trailing newline
+            flag = 0;
+        }
+        else
+            read_input_with_history(command, prompt_name);
 
         // Check for the !! command
         if (strcmp(command, "!!") == 0)
@@ -407,6 +436,9 @@ int main()
 
         if (pid == 0)
         { // Child process
+
+            // Set the process group ID for the child process
+            setpgid(0, 0);
             if (redirect_out)
             {
                 fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0660);
@@ -488,6 +520,8 @@ int main()
         // Parent process waits for the child if not running in background
         if (!amper)
         {
+            // Set the process group ID for the parent process
+            setpgid(pid, pid);
             retid = waitpid(pid, &status, 0);
             if (retid < 0)
             {
@@ -501,6 +535,9 @@ int main()
             {
                 last_exit_status = -1; // Indicate an abnormal termination
             }
+            // Reset the process IDs
+            pid = -1;
+            pipe_pid = -1;
         }
 
         // Restore stderr to the original file descriptor if it was redirected
