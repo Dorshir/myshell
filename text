@@ -1,9 +1,0 @@
-total 48
--rw-rw---- 1 codespace codespace     0 May 21 07:55 ÿÿÿÿ
--rw-rw-rw- 1 codespace codespace   526 May 21 07:24 Makefile
--rw-rw-rw- 1 codespace root          9 May 19 16:51 README.md
--rw-rw---- 1 codespace codespace   109 May 21 08:03 myerros
--rwxrwxrwx 1 codespace codespace 17384 May 21 08:13 shell
--rw-rw-rw- 1 codespace codespace  5602 May 21 08:13 shell.c
--rw-rw-rw- 1 codespace codespace  6024 May 21 08:13 shell.o
--rw-rw-rw- 1 codespace codespace     0 May 21 08:13 text

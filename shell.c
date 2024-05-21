@@ -47,13 +47,14 @@ int main() {
     int piping, retid, status;
     int fildes[2];
     char *outfile, *errfile;
-    int fd, fd_err, amper, redirect_out, redirect_err, redirect_out_app;
+    int fd, fd_err, amper, redirect_out, redirect_err, redirect_out_app, prom;
+    char *prompt_name = "hello";
 
     // Save the original stderr file descriptor
     int original_stderr = dup(STDERR_FILENO);
 
     while (1) {
-        printf("hello: ");
+        printf("%s: ", prompt_name);
         if (fgets(command, sizeof(command), stdin) == NULL) {
             perror("fgets failed");
             continue;
@@ -82,6 +83,7 @@ int main() {
             argv1[argc1 - 2] = NULL;
             outfile = argv1[argc1 - 1];
         } else if (argc1 > 2 && strcmp(argv1[argc1 - 2], "2>") == 0){
+            printf('%d', argv1[argc1 - 2]);
             redirect_err = 1;
             argv1[argc1 - 2] = NULL;
             errfile = argv1[argc1 - 1];
@@ -91,9 +93,22 @@ int main() {
             argv1[argc1 - 2] = NULL;
             outfile = argv1[argc1 - 1];
         }
+        else if (argc1 > 2 && strcmp(argv1[argc1 - 3], "prompt") == 0 && strcmp(argv1[argc1 - 2], "=") == 0){
+            prompt_name = argv1[argc1 - 1];
+            prom = 1;
+        }
         else{
             redirect_out = 0;
             redirect_out_app = 0;
+            redirect_err = 0;
+        }
+
+        // If prompt, do not fork
+        if(prom){
+            // Reset the flag after processing prompt command
+            prom = 0;
+            // Skip forking if it's a prompt command
+            continue;
         }
 
         // Fork and execute the command
@@ -163,8 +178,8 @@ int main() {
                 }
             } else {
                 execvp(argv1[0], argv1);
-                perror("execvp failed");
-                exit(EXIT_FAILURE);
+                // perror("execvp failed");
+                // exit(EXIT_FAILURE);
             }
         }
 
