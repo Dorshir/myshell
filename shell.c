@@ -151,7 +151,7 @@ int main() {
             }
 
             if (redirect_err) {
-                fd_err = open(errfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
+                fd_err = open(errfile, O_WRONLY | O_CREAT | O_TRUNC, 0660);
                 if (fd_err < 0) {
                     perror("open errfile failed");
                     exit(EXIT_FAILURE);
