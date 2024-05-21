@@ -115,6 +115,13 @@ int main() {
 
             continue;
         }
+        else if (argc1 > 1 && strcmp(argv1[0], "echo") == 0) {
+            for (int i = 1; i < argc1; i++) {
+                printf("%s ", argv1[i]);
+            }
+            printf("\n");
+            continue;
+        }
 
         else{
             redirect_out = 0;

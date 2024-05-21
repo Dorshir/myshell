@@ -1,0 +1,6 @@
+Makefile
+README.md
+shell
+shell.c
+shell.o
+text2.txt
