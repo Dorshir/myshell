@@ -47,7 +47,7 @@ int main() {
     int piping, retid, status;
     int fildes[2];
     char *outfile, *errfile;
-    int fd, fd_err, amper, redirect_out, redirect_err;
+    int fd, fd_err, amper, redirect_out, redirect_err, redirect_out_app;
 
     // Save the original stderr file descriptor
     int original_stderr = dup(STDERR_FILENO);
@@ -86,8 +86,14 @@ int main() {
             argv1[argc1 - 2] = NULL;
             errfile = argv1[argc1 - 1];
         }
+        else if (argc1 > 2 && strcmp(argv1[argc1 - 2], ">>") == 0){
+            redirect_out_app = 1;
+            argv1[argc1 - 2] = NULL;
+            outfile = argv1[argc1 - 1];
+        }
         else{
             redirect_out = 0;
+            redirect_out_app = 0;
         }
 
         // Fork and execute the command
@@ -100,6 +106,16 @@ int main() {
         if (pid == 0) { // Child process
             if (redirect_out) {
                 fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0660);
+                if (fd < 0) {
+                    perror("open failed");
+                    exit(EXIT_FAILURE);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+            }
+
+            if (redirect_out_app) {
+                fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
                 if (fd < 0) {
                     perror("open failed");
                     exit(EXIT_FAILURE);
