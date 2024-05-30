@@ -66,7 +66,7 @@ void print_status()
 void handle_sigint()
 {
     printf("\nYou typed Control-C!\n");
-    flag = 1;
+
     // Check if the process IDs are valid and active
     if (pid > 0)
     {
@@ -216,7 +216,13 @@ void read_input_with_history(char *command, const char *prompt_name)
 
     while (1)
     {
-        c = getchar();
+        signal(SIGINT, handle_sigint);
+
+        if ((c = getchar()) == EOF)
+        {
+            printf("%s: ", prompt_name);
+            continue;
+        }
 
         if (c == ESCAPE_KEY)
         {
@@ -239,6 +245,7 @@ void read_input_with_history(char *command, const char *prompt_name)
         {
             command[pos] = '\0';
             printf("\n");
+            // printf("%s: ", prompt_name);
             break;
         }
         else if (c == BACKSPACE)
@@ -290,19 +297,10 @@ int main()
     {
         // Register the signal handler for SIGINT
         signal(SIGINT, handle_sigint);
-        if (flag)
-        {
-            printf("%s: ", prompt_name);
-            if (fgets(command, sizeof(command), stdin) == NULL)
-            {
-                // perror("fgets failed");
-                continue;
-            }
-            command[strlen(command) - 1] = '\0'; // Remove trailing newline
-            flag = 0;
-        }
-        else
-            read_input_with_history(command, prompt_name);
+
+        command[strlen(command) - 1] = '\0'; // Remove trailing newline
+
+        read_input_with_history(command, prompt_name);
 
         // Check for the !! command
         if (strcmp(command, "!!") == 0)
