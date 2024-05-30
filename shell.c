@@ -425,6 +425,22 @@ int main()
             set_variable_value(argv1[argc1 - 3], argv1[argc1 - 1]);
             continue;
         }
+        else if (argc1 == 2 && strcmp(argv1[0], "read") == 0)
+        {
+            char value[MAX_COMMAND_LENGTH];
+            if (fgets(value, sizeof(value), stdin) == NULL)
+            {
+                perror("fgets failed");
+                continue;
+            }
+            value[strcspn(value, "\n")] = '\0'; // Remove trailing newline
+            // Add a $ before argv1[1] using strcat
+            char var_name[MAX_COMMAND_LENGTH] = "$";
+            strcat(var_name, argv1[1]);
+
+            set_variable_value(var_name, value);
+            continue;
+        }
 
         // Fork and execute the command
         pid_t pid = fork();
