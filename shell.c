@@ -245,7 +245,6 @@ void read_input_with_history(char *command, const char *prompt_name)
         {
             command[pos] = '\0';
             printf("\n");
-            // printf("%s: ", prompt_name);
             break;
         }
         else if (c == BACKSPACE)
@@ -292,6 +291,9 @@ int main()
 
     // Save the original stderr file descriptor
     int original_stderr = dup(STDERR_FILENO);
+
+    // Register the signal handler for SIGINT
+    signal(SIGINT, handle_sigint);
 
     while (1)
     {
@@ -369,6 +371,12 @@ int main()
             argv1[argc1 - 2] = NULL;
             outfile = argv1[argc1 - 1];
         }
+        else
+        {
+            redirect_out = 0;
+            redirect_out_app = 0;
+            redirect_err = 0;
+        }
 
         // Check for built-in commands
         if (argc1 > 1 && strcmp(argv1[0], "prompt") == 0)
@@ -412,16 +420,10 @@ int main()
         {
             exit(EXIT_SUCCESS);
         }
-        else if (argc1 > 2 && strcmp(argv1[argc1 - 2], "=") == 0)
+        else if (argc1 > 2 && argv1[argc1 - 2] != NULL && strcmp(argv1[argc1 - 2], "=") == 0)
         {
             set_variable_value(argv1[argc1 - 3], argv1[argc1 - 1]);
             continue;
-        }
-        else
-        {
-            redirect_out = 0;
-            redirect_out_app = 0;
-            redirect_err = 0;
         }
 
         // Fork and execute the command
@@ -463,6 +465,7 @@ int main()
 
             if (redirect_err)
             {
+                printf("hello");
                 fd_err = open(errfile, O_WRONLY | O_CREAT | O_TRUNC, 0660);
                 if (fd_err < 0)
                 {
@@ -511,7 +514,7 @@ int main()
             {
                 execvp(argv1[0], argv1);
                 perror("execvp failed");
-                exit(EXIT_FAILURE);
+                exit(errno);
             }
         }
 
@@ -520,7 +523,8 @@ int main()
         {
             // Set the process group ID for the parent process
             setpgid(pid, pid);
-            retid = waitpid(pid, &status, 0);
+
+            retid = waitpid(pid, &status, WUNTRACED);
             if (retid < 0)
             {
                 perror("waitpid failed");
