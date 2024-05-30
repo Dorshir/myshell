@@ -101,6 +101,7 @@ void parse_command(char *command, char **argv1, char **argv2, int *piping)
             *piping = 1;
             break;
         }
+        
     }
     argv1[i] = NULL;
 
@@ -133,6 +134,16 @@ char *get_variable_value(const char *name)
 
 void set_variable_value(const char *name, const char *value)
 {
+    //check if variable already exist
+    for (int i = 0; i <= variable_count; i++)
+    {
+        if (strcmp(variables[i].name ,name) == 0)
+        {
+            strcpy(variables[i].value, value);
+            return;
+        }
+    }
+
     if (variable_count < MAX_ARG_COUNT)
     {
         strcpy(variables[variable_count].name, name);
@@ -340,16 +351,6 @@ int main()
             amper = 0;
         }
 
-        // Check for variable substitution
-        for (int i = 0; argv1[i] != NULL; i++)
-        {
-            char *value = get_variable_value(argv1[i]);
-            if (value != NULL)
-            {
-                argv1[i] = value;
-            }
-        }
-
         add_to_history(curr_command);
 
         // Check for output redirection
@@ -400,6 +401,16 @@ int main()
             }
             else
             {
+                // Check for variable substitution
+                for (int i = 0; argv1[i] != NULL; i++)
+                {
+                    char *value = get_variable_value(argv1[i]);
+                    if (value != NULL)
+                    {
+                        argv1[i] = value;
+                    }
+                }
+
                 for (int i = 1; i < argc1; i++)
                 {
                     printf("%s ", argv1[i]);
