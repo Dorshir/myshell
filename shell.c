@@ -101,7 +101,6 @@ void parse_command(char *command, char **argv1, char **argv2, int *piping)
             *piping = 1;
             break;
         }
-        
     }
     argv1[i] = NULL;
 
@@ -134,10 +133,10 @@ char *get_variable_value(const char *name)
 
 void set_variable_value(const char *name, const char *value)
 {
-    //check if variable already exist
+    // check if variable already exist
     for (int i = 0; i <= variable_count; i++)
     {
-        if (strcmp(variables[i].name ,name) == 0)
+        if (strcmp(variables[i].name, name) == 0)
         {
             strcpy(variables[i].value, value);
             return;
@@ -279,6 +278,176 @@ void read_input_with_history(char *command, const char *prompt_name)
         }
     }
     disable_raw_mode();
+}
+
+void execute_if_else(char **argv, int argc)
+{
+    if (argc < 5 || strcmp(argv[0], "if") != 0)
+    {
+        fprintf(stderr, "Invalid if statement syntax\n");
+        return;
+    }
+
+    int then_index = -1;
+    int else_index = -1;
+    int fi_index = -1;
+
+    // Find the positions of 'then', 'else', and 'fi' in the argument list
+    for (int i = 1; i < argc; i++)
+    {
+        if (strcmp(argv[i], "then") == 0)
+        {
+            then_index = i;
+        }
+        else if (strcmp(argv[i], "else") == 0)
+        {
+            else_index = i;
+        }
+        else if (strcmp(argv[i], "fi") == 0)
+        {
+            fi_index = i;
+        }
+    }
+
+    // Ensure 'then' comes before 'else' if both are present
+    if (else_index != -1 && then_index > else_index)
+    {
+        fprintf(stderr, "Invalid if statement syntax: 'then' must come before 'else'\n");
+        return;
+    }
+
+    // Extract the condition
+    char *condition_argv[MAX_ARG_COUNT];
+    for (int i = 1; i < then_index; i++)
+    {
+        condition_argv[i - 1] = argv[i];
+    }
+    condition_argv[then_index - 1] = NULL;
+
+    // Execute the condition command
+    int status;
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+        execvp(condition_argv[0], condition_argv);
+        perror("execvp failed");
+        exit(EXIT_FAILURE);
+    }
+    else if (pid > 0)
+    {
+        waitpid(pid, &status, 0);
+    }
+    else
+    {
+        perror("fork failed");
+        return;
+    }
+
+    // Check the condition command's exit status
+    if (WIFEXITED(status))
+    {
+        int condition_exit_status = WEXITSTATUS(status);
+        if (condition_exit_status == 0)
+        {
+            // Condition is true
+            if (then_index != -1 && else_index != -1)
+            {
+                // 'then' and 'else' blocks both exist
+                for (int i = then_index + 1; i < else_index; i++)
+                {
+                    // Execute the 'then' block
+                    char *then_argv[MAX_ARG_COUNT];
+                    int then_argc = 0;
+                    while (argv[i] != NULL && strcmp(argv[i], "else") != 0)
+                    {
+                        then_argv[then_argc++] = argv[i++];
+                    }
+                    then_argv[then_argc] = NULL;
+
+                    pid_t then_pid = fork();
+                    if (then_pid == 0)
+                    {
+                        execvp(then_argv[0], then_argv);
+                        perror("execvp failed");
+                        exit(EXIT_FAILURE);
+                    }
+                    else if (then_pid > 0)
+                    {
+                        int then_status;
+                        waitpid(then_pid, &then_status, 0);
+                    }
+                    else
+                    {
+                        perror("fork failed");
+                    }
+                }
+            }
+            else if (then_index != -1 && else_index == -1 && fi_index != -1)
+            {
+                // 'then' block only exists
+                for (int i = then_index + 1; i < fi_index; i++)
+                {
+                    // Execute the 'then' block
+                    char *then_argv[MAX_ARG_COUNT];
+                    int then_argc = 0;
+                    while (argv[i] != NULL && strcmp(argv[i], "fi") != 0)
+                    {
+                        then_argv[then_argc++] = argv[i++];
+                    }
+                    then_argv[then_argc] = NULL;
+
+                    pid_t then_pid = fork();
+                    if (then_pid == 0)
+                    {
+                        execvp(then_argv[0], then_argv);
+                        perror("execvp failed");
+                        exit(EXIT_FAILURE);
+                    }
+                    else if (then_pid > 0)
+                    {
+                        int then_status;
+                        waitpid(then_pid, &then_status, 0);
+                    }
+                    else
+                    {
+                        perror("fork failed");
+                    }
+                }
+            }
+        }
+        else if (else_index != -1 && fi_index != -1)
+        {
+            // 'else' block exists
+            for (int i = else_index + 1; i < fi_index; i++)
+            {
+                // Execute the 'else' block
+                char *else_argv[MAX_ARG_COUNT];
+                int else_argc = 0;
+                while (argv[i] != NULL && strcmp(argv[i], "fi") != 0)
+                {
+                    else_argv[else_argc++] = argv[i++];
+                }
+                else_argv[else_argc] = NULL;
+
+                pid_t else_pid = fork();
+                if (else_pid == 0)
+                {
+                    execvp(else_argv[0], else_argv);
+                    perror("execvp failed");
+                    exit(EXIT_FAILURE);
+                }
+                else if (else_pid > 0)
+                {
+                    int else_status;
+                    waitpid(else_pid, &else_status, 0);
+                }
+                else
+                {
+                    perror("fork failed");
+                }
+            }
+        }
+    }
 }
 
 int main()
@@ -450,6 +619,11 @@ int main()
             strcat(var_name, argv1[1]);
 
             set_variable_value(var_name, value);
+            continue;
+        }
+        else if (argc1 > 0 && strcmp(argv1[0], "if") == 0)
+        {
+            execute_if_else(argv1, argc1);
             continue;
         }
 
