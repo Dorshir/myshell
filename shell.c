@@ -10,10 +10,10 @@
 #include <termios.h>
 #include <ctype.h>
 
-#define MAX_ARG_COUNT 10 // max pipes
-#define MAX_COMMAND_LENGTH 1024 // command length
-#define MAX_SUBCOMMAND_LENGTH 480 //subcommand length
-#define MAX_SUBCOMMAND_COUNTER 10 //subcommand counter
+#define MAX_ARG_COUNT 10          // max pipes
+#define MAX_COMMAND_LENGTH 1024   // command length
+#define MAX_SUBCOMMAND_LENGTH 480 // subcommand length
+#define MAX_SUBCOMMAND_COUNTER 10 // subcommand counter
 
 #define MAX_HISTORY_SIZE 20
 #define UP_ARROW 65
@@ -51,7 +51,6 @@ int amper, redirect_out, redirect_err, redirect_out_app;
 char *outfile, *errfile;
 char *prompt_name;
 
-
 void disable_raw_mode()
 {
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
@@ -84,29 +83,31 @@ void handle_sigint()
     {
         // Kill the child process or process group
         killpg(pid, SIGKILL);
-        printf("Stopping process with PID %d\n", pid);
     }
 
     if (pipe_pid > 0)
     {
         // Kill the child process or process group
         killpg(pipe_pid, SIGKILL);
-        printf("Stopping process with PID %d\n", pipe_pid);
     }
 }
 
 // Function to trim leading and trailing spaces
-char *trim(char *str) {
+char *trim(char *str)
+{
     char *end;
 
     // Trim leading space
-    while (isspace((unsigned char)*str)) str++;
+    while (isspace((unsigned char)*str))
+        str++;
 
-    if (*str == 0) return str; // All spaces?
+    if (*str == 0)
+        return str; // All spaces?
 
     // Trim trailing space
     end = str + strlen(str) - 1;
-    while (end > str && isspace((unsigned char)*end)) end--;
+    while (end > str && isspace((unsigned char)*end))
+        end--;
 
     // Write new null terminator
     *(end + 1) = 0;
@@ -115,43 +116,51 @@ char *trim(char *str) {
 }
 
 // Custom function to duplicate a string
-char *my_strdup(const char *s) {
+char *my_strdup(const char *s)
+{
     size_t len = strlen(s) + 1;
     char *dup = malloc(len);
-    if (dup) {
+    if (dup)
+    {
         memcpy(dup, s, len);
     }
     return dup;
 }
 
 // Function to split a string by a delimiter and handle multiple spaces
-char **split_string(const char *str, const char delimiter, int *num_tokens) {
+char **split_string(const char *str, const char delimiter, int *num_tokens)
+{
     int count = 0;
     const char *temp = str;
 
     // Count the number of delimiters
-    while (*temp) {
-        if (*temp == delimiter) count++;
+    while (*temp)
+    {
+        if (*temp == delimiter)
+            count++;
         temp++;
     }
 
     // Allocate memory for tokens
     char **tokens = malloc((count + 1) * sizeof(char *));
-    if (tokens == NULL) {
+    if (tokens == NULL)
+    {
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
 
     int index = 0;
     char *start = my_strdup(str); // Duplicate the input string
-    if (start == NULL) {
+    if (start == NULL)
+    {
         fprintf(stderr, "Memory allocation failed\n");
         free(tokens);
         exit(EXIT_FAILURE);
     }
 
     char *end = strchr(start, delimiter);
-    while (end != NULL) {
+    while (end != NULL)
+    {
         *end = '\0';
         tokens[index++] = trim(start);
         start = end + 1;
@@ -163,43 +172,46 @@ char **split_string(const char *str, const char delimiter, int *num_tokens) {
     return tokens;
 }
 
-void argvAllocate(char**** argv){
-    char*** argvVal = *argv;
+void argvAllocate(char ****argv)
+{
+    char ***argvVal = *argv;
     for (int i = 0; i < MAX_ARG_COUNT; i++)
     {
-        argvVal[i] = (char**)(malloc(sizeof(char*) * 10));
+        argvVal[i] = (char **)(malloc(sizeof(char *) * 10));
         for (int j = 0; j < MAX_COMMAND_LENGTH; j++)
         {
-            argvVal[i][j] = (char*)(malloc(sizeof(char*) * MAX_SUBCOMMAND_LENGTH));
+            argvVal[i][j] = (char *)(malloc(sizeof(char *) * MAX_SUBCOMMAND_LENGTH));
         }
     }
 }
 
-void parse_command(char *command, char ****argv, int *piping , int* argc , int* argv_count) {
+void parse_command(char *command, char ****argv, int *piping, int *argc, int *argv_count)
+{
     int num_tokens;
-    char*** argvArray = *argv;
+    char ***argvArray = *argv;
     char **commands = split_string(command, '|', &num_tokens);
-    if (num_tokens>1)
+    if (num_tokens > 1)
     {
-        *piping =1;
+        *piping = 1;
     }
     *argv_count = num_tokens;
-    for (int i = 0; i < num_tokens; i++) {
+    for (int i = 0; i < num_tokens; i++)
+    {
         printf("Command %d: %s\n", i + 1, commands[i]);
-        
+
         // Tokenize each command by spaces
         int num_subtokens;
-        
+
         argvArray[i] = split_string(commands[i], ' ', &num_subtokens);
         argc[i] = num_subtokens;
-        for (int j = 0; j < num_subtokens; j++) {
-            printf("  Subtoken [%d][%d]: %s\n",i, j, argvArray[i][j]);
+        for (int j = 0; j < num_subtokens; j++)
+        {
+            printf("  Subtoken [%d][%d]: %s\n", i, j, argvArray[i][j]);
         }
         // free(subtokens); // Free the memory allocated for subtokens
     }
 
     free(commands); // Free the memory allocated for commands
-
 }
 
 char *get_variable_value(const char *name)
@@ -533,152 +545,152 @@ void execute_if_else(char **argv, int argc)
     }
 }
 
-void expand_commands(char **** argv , int* need_fork , int* argc , char* command){
-        char*** argvMat = *argv; 
-    
-        // Check for the !! command
-        if (strcmp(command, "!!") == 0)
-        {
-            if (strlen(last_command) == 0)
-            {
-                printf("No previous command to repeat.\n");
-                *need_fork = 0;
-            }
-            strcpy(command, last_command);
-        }
-        else
-        {
-            strcpy(last_command, command); // Store the current command as the last command
-        }
-        strcpy(curr_command, command);
-        
-        // Check if the command is empty
-        if (argvMat[0][0] == NULL)
-            *need_fork = 0;
-        
-        //Check for background execution
-        int argc1 = argc[0];
+void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
+{
+    char ***argvMat = *argv;
 
-
-        if (argc1 > 0 && strcmp(argvMat[0][argc1 - 1], "&") == 0)
+    // Check for the !! command
+    if (strcmp(command, "!!") == 0)
+    {
+        if (strlen(last_command) == 0)
         {
-            amper = 1;
-            argvMat[0][argc1 - 1] = NULL;
-        }
-        else
-        {
-            amper = 0;
-        }
-        
-        add_to_history(curr_command);
-        
-        // Check for output redirection
-        if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], ">") == 0)
-        {
-            redirect_out = 1;
-            argvMat[0][argc1 - 2] = NULL;
-            outfile = argvMat[0][argc1 - 1];
-        }
-        else if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], "2>") == 0)
-        {
-            redirect_err = 1;
-            argvMat[0][argc1 - 2] = NULL;
-            errfile = argvMat[0][argc1 - 1];
-        }
-        else if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], ">>") == 0)
-        {
-            redirect_out_app = 1;
-            argvMat[0][argc1 - 2] = NULL;
-            outfile = argvMat[0][argc1 - 1];
-        }
-        else
-        {
-            redirect_out = 0;
-            redirect_out_app = 0;
-            redirect_err = 0;
-        }
-        
-        // Check for built-in commands
-        if (argc1 > 1 && strcmp(argvMat[0][0], "prompt") == 0)
-        {
-            free(prompt_name); // Free the previous prompt name memor
-            prompt_name = malloc(strlen(argvMat[0][argc1 - 1]) + 1);
-            if (prompt_name == NULL)
-            {
-                perror("Memory allocation failed");
-                exit(EXIT_FAILURE);
-            }
-            strcpy(prompt_name, argvMat[0][argc1 - 1]);
-
+            printf("No previous command to repeat.\n");
             *need_fork = 0;
         }
-        
-        else if (argc1 > 1 && strcmp(argvMat[0][0], "echo") == 0)
+        strcpy(command, last_command);
+        strcpy(argvMat[0], last_command);
+    }
+    else
+    {
+        strcpy(last_command, command); // Store the current command as the last command
+    }
+    strcpy(curr_command, command);
+
+    // Check if the command is empty
+    if (argvMat[0][0] == NULL)
+        *need_fork = 0;
+
+    // Check for background execution
+    int argc1 = argc[0];
+
+    if (argc1 > 0 && strcmp(argvMat[0][argc1 - 1], "&") == 0)
+    {
+        amper = 1;
+        argvMat[0][argc1 - 1] = NULL;
+    }
+    else
+    {
+        amper = 0;
+    }
+
+    add_to_history(curr_command);
+
+    // Check for output redirection
+    if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], ">") == 0)
+    {
+        redirect_out = 1;
+        argvMat[0][argc1 - 2] = NULL;
+        outfile = argvMat[0][argc1 - 1];
+    }
+    else if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], "2>") == 0)
+    {
+        redirect_err = 1;
+        argvMat[0][argc1 - 2] = NULL;
+        errfile = argvMat[0][argc1 - 1];
+    }
+    else if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], ">>") == 0)
+    {
+        redirect_out_app = 1;
+        argvMat[0][argc1 - 2] = NULL;
+        outfile = argvMat[0][argc1 - 1];
+    }
+    else
+    {
+        redirect_out = 0;
+        redirect_out_app = 0;
+        redirect_err = 0;
+    }
+
+    // Check for built-in commands
+    if (argc1 > 1 && strcmp(argvMat[0][0], "prompt") == 0)
+    {
+        free(prompt_name); // Free the previous prompt name memor
+        prompt_name = malloc(strlen(argvMat[0][argc1 - 1]) + 1);
+        if (prompt_name == NULL)
         {
-            if (strcmp(argvMat[0][1], "$?") == 0)
+            perror("Memory allocation failed");
+            exit(EXIT_FAILURE);
+        }
+        strcpy(prompt_name, argvMat[0][argc1 - 1]);
+
+        *need_fork = 0;
+    }
+
+    else if (argc1 > 1 && strcmp(argvMat[0][0], "echo") == 0)
+    {
+        if (strcmp(argvMat[0][1], "$?") == 0)
+        {
+            printf("%d \n", last_exit_status);
+        }
+        else
+        {
+            // Check for variable substitution
+            for (int i = 0; argvMat[0][i] != NULL; i++)
             {
-                printf("%d \n", last_exit_status);
-            }
-            else
-            {
-                // Check for variable substitution
-                for (int i = 0; argvMat[0][i] != NULL; i++)
+                char *value = get_variable_value(argvMat[0][i]);
+                if (value != NULL)
                 {
-                    char *value = get_variable_value(argvMat[0][i]);
-                    if (value != NULL)
-                    {
-                        argvMat[0][i] = value;
-                    }
+                    argvMat[0][i] = value;
                 }
+            }
 
-                for (int i = 1; i < argc1; i++)
-                {
-                    printf("%s ", argvMat[0][i]);
-                }
-                printf("\n");
-            }
-            *need_fork = 0;
-        }
-        else if (argc1 > 1 && strcmp(argvMat[0][0], "cd") == 0)
-        {
-            if (chdir(argvMat[0][1]) != 0)
+            for (int i = 1; i < argc1; i++)
             {
-                perror("chdir failed");
+                printf("%s ", argvMat[0][i]);
             }
+            printf("\n");
+        }
+        *need_fork = 0;
+    }
+    else if (argc1 > 1 && strcmp(argvMat[0][0], "cd") == 0)
+    {
+        if (chdir(argvMat[0][1]) != 0)
+        {
+            perror("chdir failed");
+        }
+        *need_fork = 0;
+    }
+    else if (argc1 == 1 && strcmp(argvMat[0][0], "quit") == 0)
+    {
+        exit(EXIT_SUCCESS);
+    }
+    else if (argc1 > 2 && argvMat[0][argc1 - 2] != NULL && strcmp(argvMat[0][argc1 - 2], "=") == 0)
+    {
+        set_variable_value(argvMat[0][argc1 - 3], argvMat[0][argc1 - 1]);
+        *need_fork = 0;
+    }
+    else if (argc1 == 2 && strcmp(argvMat[0][0], "read") == 0)
+    {
+        char value[MAX_COMMAND_LENGTH];
+        if (fgets(value, sizeof(value), stdin) == NULL)
+        {
+            perror("fgets failed");
             *need_fork = 0;
         }
-        else if (argc1 == 1 && strcmp(argvMat[0][0], "quit") == 0)
-        {
-            exit(EXIT_SUCCESS);
-        }
-        else if (argc1 > 2 && argvMat[0][argc1 - 2] != NULL && strcmp(argvMat[0][argc1 - 2], "=") == 0)
-        {
-            set_variable_value(argvMat[0][argc1 - 3], argvMat[0][argc1 - 1]);
-            *need_fork = 0;
-        }
-        else if (argc1 == 2 && strcmp(argvMat[0][0], "read") == 0)
-        {
-            char value[MAX_COMMAND_LENGTH];
-            if (fgets(value, sizeof(value), stdin) == NULL)
-            {
-                perror("fgets failed");
-                *need_fork = 0;
-            }
-            value[strcspn(value, "\n")] = '\0'; // Remove trailing newline
-            // Add a $ before argv1[1] using strcat
-            char var_name[MAX_COMMAND_LENGTH] = "$";
-            strcat(var_name, argvMat[0][1]);
+        value[strcspn(value, "\n")] = '\0'; // Remove trailing newline
+        // Add a $ before argv1[1] using strcat
+        char var_name[MAX_COMMAND_LENGTH] = "$";
+        strcat(var_name, argvMat[0][1]);
 
-            set_variable_value(var_name, value);
-            *need_fork = 0;
-        }
-        else if (argc1 > 0 && strcmp(argvMat[0][0], "if") == 0)
-        {
-            execute_if_else(argvMat[0], argc1);
-            *need_fork = 0;
-        }
+        set_variable_value(var_name, value);
+        *need_fork = 0;
+    }
+    else if (argc1 > 0 && strcmp(argvMat[0][0], "if") == 0)
+    {
+        execute_if_else(argvMat[0], argc1);
+        *need_fork = 0;
+    }
 }
-
 
 int main()
 {
@@ -688,7 +700,6 @@ int main()
     int fildes_prev[2];
     int fd, fd_err;
 
-    
     prompt_name = malloc(strlen("hello") + 1);
     if (prompt_name == NULL)
     {
@@ -697,7 +708,8 @@ int main()
     }
 
     argv = (char ***)malloc(MAX_ARG_COUNT * sizeof(char **));
-    if (argv == NULL) {
+    if (argv == NULL)
+    {
         fprintf(stderr, "Memory allocation failed for argv\n");
         return 1; // Return error code
     }
@@ -721,45 +733,52 @@ int main()
         int num_tokens;
         int argc[MAX_SUBCOMMAND_COUNTER] = {0};
         int argv_count;
-        int needfork = 0;
+        int needfork = 1;
         /////////
         read_input_with_history(command, prompt_name);
 
-        parse_command(command, &argv, &piping, argc , &argv_count);
+        parse_command(command, &argv, &piping, argc, &argv_count);
 
-        expand_commands(&argv, &needfork , argc , command);
- 
-        if(needfork == 1){
-            continue;
-        }
+        // expand_commands(&argv, &needfork , argc , command);
 
         // Check if the command is empty
         if (argv[0][0] == NULL)
             continue;
 
-        for (int i = 0; i < argv_count; i++) {
+        for (int i = 0; i < argv_count; i++)
+        {
 
-            expand_commands(&argv, &needfork , argc , command);
+            expand_commands(&argv, &needfork, argc, command);
 
-            if (i < argv_count - 1) {
+            if (i < argv_count - 1)
+            {
                 // Create a pipe
-                if (pipe(fildes) == -1) {
+                if (pipe(fildes) == -1)
+                {
                     perror("pipe");
                     exit(1);
                 }
             }
 
+            if (needfork == 0)
+            {
+                continue;
+            }
+
             // Fork a child process
             pid = fork();
-            if (pid == 0) {
+            if (pid == 0)
+            {
                 // Child process
-                if (i > 0) {
+                if (i > 0)
+                {
                     // Redirect input from the previous pipe
                     dup2(fildes_prev[0], STDIN_FILENO);
                     close(fildes_prev[0]);
                     close(fildes_prev[1]);
                 }
-                if (i < argv_count - 1) {
+                if (i < argv_count - 1)
+                {
                     // Redirect output to the next pipe
                     close(fildes[0]);
                     dup2(fildes[1], STDOUT_FILENO);
@@ -767,48 +786,63 @@ int main()
                 }
 
                 // Handle output redirection
-                if (redirect_out) {
+                if (redirect_out)
+                {
                     fd = creat(outfile, 0660);
                     close(STDOUT_FILENO);
                     dup(fd);
                     close(fd);
-                } else if (redirect_err) {
+                }
+                else if (redirect_err)
+                {
                     fd_err = creat(errfile, 0660);
                     close(STDERR_FILENO);
                     dup(fd_err);
                     close(fd_err);
-                } else if (redirect_out_app) {
+                }
+                else if (redirect_out_app)
+                {
                     fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
                     close(STDOUT_FILENO);
                     dup(fd);
                     close(fd);
                 }
 
-                if (execvp(argv[i][0], argv[i]) == -1) {
+                if (execvp(argv[i][0], argv[i]) == -1)
+                {
                     fprintf(stderr, "Command execution failed: %s\n", strerror(errno));
                     exit(errno);
                 }
-            } else if (pid > 0) {
+            }
+            else if (pid > 0)
+            {
                 // Parent process
-                if (i > 0) {
+                if (i > 0)
+                {
                     // Close the previous pipe
                     close(fildes_prev[0]);
                     close(fildes_prev[1]);
                 }
-                if (i < argv_count - 1) {
+                if (i < argv_count - 1)
+                {
                     // Save the current pipe for the next iteration
                     fildes_prev[0] = fildes[0];
                     fildes_prev[1] = fildes[1];
                 }
 
                 // Wait for the child process to finish
-                if (!amper) {
+                if (!amper)
+                {
                     waitpid(pid, &status, 0);
                     last_exit_status = WEXITSTATUS(status);
-                } else {
+                }
+                else
+                {
                     printf("Process with PID %d is running in the background\n", pid);
                 }
-            } else {
+            }
+            else
+            {
                 perror("fork");
                 exit(1);
             }
@@ -819,4 +853,4 @@ int main()
     free(prompt_name);
 
     return 0;
-    }
+}
