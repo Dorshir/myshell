@@ -525,46 +525,9 @@ void execute_if_else(char **argv, int argc)
     }
 }
 
-int main()
-{
-    char command[MAX_COMMAND_LENGTH];
-    char curr_command[MAX_COMMAND_LENGTH];
-    char ***argv;
-    char last_command[MAX_COMMAND_LENGTH] = "";
-    int piping, retid, status;
-    int fildes[2];
-    char *outfile, *errfile;
-    int fd, fd_err, amper, redirect_out, redirect_err, redirect_out_app;
-    char *prompt_name = malloc(strlen("hello") + 1);
-    if (prompt_name == NULL)
-    {
-        perror("Memory allocation failed");
-        exit(EXIT_FAILURE);
-    }
+void expand_commands(char *** argv , int* need_fork , int* argc){
 
-    argv = (char ***)malloc(MAX_ARG_COUNT * sizeof(char **));
-    if (argv == NULL) {
-        fprintf(stderr, "Memory allocation failed for argv\n");
-        return 1; // Return error code
-    }
-    argvAllocate(&argv);
-
-    strcpy(prompt_name, "hello");
-
-    // Save the original stderr file descriptor
-    int original_stderr = dup(STDERR_FILENO);
-
-    // Register the signal handler for SIGINT
-    signal(SIGINT, handle_sigint);
-
-    while (1)
-    {
-        // Register the signal handler for SIGINT
-        signal(SIGINT, handle_sigint);
-
-        command[strlen(command) - 1] = '\0'; // Remove trailing newline
-
-        read_input_with_history(command, prompt_name);
+    read_input_with_history(command, prompt_name);
 
         // Check for the !! command
         if (strcmp(command, "!!") == 0)
@@ -572,7 +535,7 @@ int main()
             if (strlen(last_command) == 0)
             {
                 printf("No previous command to repeat.\n");
-                continue;
+                *need_fork = 0;
             }
             strcpy(command, last_command);
         }
@@ -581,15 +544,10 @@ int main()
             strcpy(last_command, command); // Store the current command as the last command
         }
         strcpy(curr_command, command);
-        int num_tokens;
-        int argc[MAX_SUBCOMMAND_COUNTER] = {0};
-        
-        /////////
-        parse_command(command, &argv, &piping,&argc);
         
         // Check if the command is empty
         if (argv[0][0] == NULL)
-            continue;
+            *need_fork = 0;
         
         //Check for background execution
         int argc1 = argc[0];
@@ -645,7 +603,7 @@ int main()
             }
             strcpy(prompt_name, argv[0][argc1 - 1]);
 
-            continue;
+            *need_fork = 0;
         }
         
         else if (argc1 > 1 && strcmp(argv[0][0], "echo") == 0)
@@ -672,7 +630,7 @@ int main()
                 }
                 printf("\n");
             }
-            continue;
+            *need_fork = 0;
         }
         else if (argc1 > 1 && strcmp(argv[0][0], "cd") == 0)
         {
@@ -680,7 +638,7 @@ int main()
             {
                 perror("chdir failed");
             }
-            continue;
+            *need_fork = 0;
         }
         else if (argc1 == 1 && strcmp(argv[0][0], "quit") == 0)
         {
@@ -689,7 +647,7 @@ int main()
         else if (argc1 > 2 && argv[0][argc1 - 2] != NULL && strcmp(argv[0][argc1 - 2], "=") == 0)
         {
             set_variable_value(argv[0][argc1 - 3], argv[0][argc1 - 1]);
-            continue;
+            *need_fork = 0;
         }
         else if (argc1 == 2 && strcmp(argv[0][0], "read") == 0)
         {
@@ -697,7 +655,7 @@ int main()
             if (fgets(value, sizeof(value), stdin) == NULL)
             {
                 perror("fgets failed");
-                continue;
+                *need_fork = 0;
             }
             value[strcspn(value, "\n")] = '\0'; // Remove trailing newline
             // Add a $ before argv1[1] using strcat
@@ -705,13 +663,74 @@ int main()
             strcat(var_name, argv[0][1]);
 
             set_variable_value(var_name, value);
-            continue;
+            *need_fork = 0;
         }
         else if (argc1 > 0 && strcmp(argv[0][0], "if") == 0)
         {
             execute_if_else(argv[0], argc1);
+            *need_fork = 0;
+        }
+}
+
+int redirect_out, redirect_err, redirect_out_app;
+char *outfile, *errfile;
+char *prompt_name;
+char command[MAX_COMMAND_LENGTH];
+char curr_command[MAX_COMMAND_LENGTH];
+char last_command[MAX_COMMAND_LENGTH] = "";
+int amper;
+
+int main()
+{
+    
+    
+    char ***argv;
+    
+    int piping, retid, status;
+    int fildes[2];
+    int fildes_prev[2];
+    int fd, fd_err, amper;
+    prompt_name = malloc(strlen("hello") + 1);
+    if (prompt_name == NULL)
+    {
+        perror("Memory allocation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    argv = (char ***)malloc(MAX_ARG_COUNT * sizeof(char **));
+    if (argv == NULL) {
+        fprintf(stderr, "Memory allocation failed for argv\n");
+        return 1; // Return error code
+    }
+    argvAllocate(&argv);
+
+    strcpy(prompt_name, "hello");
+
+    // Save the original stderr file descriptor
+    int original_stderr = dup(STDERR_FILENO);
+
+    // Register the signal handler for SIGINT
+    signal(SIGINT, handle_sigint);
+
+    while (1)
+    {
+        piping = 0;
+        // Register the signal handler for SIGINT
+        signal(SIGINT, handle_sigint);
+
+        command[strlen(command) - 1] = '\0'; // Remove trailing newline
+
+        int num_tokens;
+        int need_fork;
+        int argc[MAX_SUBCOMMAND_COUNTER] = {0};
+        
+        /////////
+        parse_command(command, &argv, &piping ,&argc);
+        expand_commands(argv, &need_fork, &argc);
+        if(need_fork == 1){
             continue;
         }
+         /////here
 
         // Fork and execute the command
         pid_t pid = fork();
@@ -764,7 +783,7 @@ int main()
 
             if (piping)
             {
-                
+
                 if (pipe(fildes) < 0)
                 {
                     perror("pipe failed");
