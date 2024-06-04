@@ -44,6 +44,14 @@ int current_history_index = -1;
 
 struct termios orig_termios;
 
+char command[MAX_COMMAND_LENGTH];
+char curr_command[MAX_COMMAND_LENGTH];
+char last_command[MAX_COMMAND_LENGTH] = "";
+int amper, redirect_out, redirect_err, redirect_out_app;
+char *outfile, *errfile;
+char *prompt_name;
+
+
 void disable_raw_mode()
 {
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
@@ -525,10 +533,9 @@ void execute_if_else(char **argv, int argc)
     }
 }
 
-void expand_commands(char *** argv , int* need_fork , int* argc){
-
-    read_input_with_history(command, prompt_name);
-
+void expand_commands(char **** argv , int* need_fork , int* argc , char* command){
+        char*** argvMat = *argv; 
+    
         // Check for the !! command
         if (strcmp(command, "!!") == 0)
         {
@@ -546,17 +553,17 @@ void expand_commands(char *** argv , int* need_fork , int* argc){
         strcpy(curr_command, command);
         
         // Check if the command is empty
-        if (argv[0][0] == NULL)
+        if (argvMat[0][0] == NULL)
             *need_fork = 0;
         
         //Check for background execution
         int argc1 = argc[0];
 
 
-        if (argc1 > 0 && strcmp(argv[0][argc1 - 1], "&") == 0)
+        if (argc1 > 0 && strcmp(argvMat[0][argc1 - 1], "&") == 0)
         {
             amper = 1;
-            argv[0][argc1 - 1] = NULL;
+            argvMat[0][argc1 - 1] = NULL;
         }
         else
         {
@@ -566,23 +573,23 @@ void expand_commands(char *** argv , int* need_fork , int* argc){
         add_to_history(curr_command);
         
         // Check for output redirection
-        if (argc1 > 2 && strcmp(argv[0][argc1 - 2], ">") == 0)
+        if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], ">") == 0)
         {
             redirect_out = 1;
-            argv[0][argc1 - 2] = NULL;
-            outfile = argv[0][argc1 - 1];
+            argvMat[0][argc1 - 2] = NULL;
+            outfile = argvMat[0][argc1 - 1];
         }
-        else if (argc1 > 2 && strcmp(argv[0][argc1 - 2], "2>") == 0)
+        else if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], "2>") == 0)
         {
             redirect_err = 1;
-            argv[0][argc1 - 2] = NULL;
-            errfile = argv[0][argc1 - 1];
+            argvMat[0][argc1 - 2] = NULL;
+            errfile = argvMat[0][argc1 - 1];
         }
-        else if (argc1 > 2 && strcmp(argv[0][argc1 - 2], ">>") == 0)
+        else if (argc1 > 2 && strcmp(argvMat[0][argc1 - 2], ">>") == 0)
         {
             redirect_out_app = 1;
-            argv[0][argc1 - 2] = NULL;
-            outfile = argv[0][argc1 - 1];
+            argvMat[0][argc1 - 2] = NULL;
+            outfile = argvMat[0][argc1 - 1];
         }
         else
         {
@@ -592,64 +599,64 @@ void expand_commands(char *** argv , int* need_fork , int* argc){
         }
         
         // Check for built-in commands
-        if (argc1 > 1 && strcmp(argv[0][0], "prompt") == 0)
+        if (argc1 > 1 && strcmp(argvMat[0][0], "prompt") == 0)
         {
             free(prompt_name); // Free the previous prompt name memor
-            prompt_name = malloc(strlen(argv[0][argc1 - 1]) + 1);
+            prompt_name = malloc(strlen(argvMat[0][argc1 - 1]) + 1);
             if (prompt_name == NULL)
             {
                 perror("Memory allocation failed");
                 exit(EXIT_FAILURE);
             }
-            strcpy(prompt_name, argv[0][argc1 - 1]);
+            strcpy(prompt_name, argvMat[0][argc1 - 1]);
 
             *need_fork = 0;
         }
         
-        else if (argc1 > 1 && strcmp(argv[0][0], "echo") == 0)
+        else if (argc1 > 1 && strcmp(argvMat[0][0], "echo") == 0)
         {
-            if (strcmp(argv[0][1], "$?") == 0)
+            if (strcmp(argvMat[0][1], "$?") == 0)
             {
                 printf("%d \n", last_exit_status);
             }
             else
             {
                 // Check for variable substitution
-                for (int i = 0; argv[0][i] != NULL; i++)
+                for (int i = 0; argvMat[0][i] != NULL; i++)
                 {
-                    char *value = get_variable_value(argv[0][i]);
+                    char *value = get_variable_value(argvMat[0][i]);
                     if (value != NULL)
                     {
-                        argv[0][i] = value;
+                        argvMat[0][i] = value;
                     }
                 }
 
                 for (int i = 1; i < argc1; i++)
                 {
-                    printf("%s ", argv[0][i]);
+                    printf("%s ", argvMat[0][i]);
                 }
                 printf("\n");
             }
             *need_fork = 0;
         }
-        else if (argc1 > 1 && strcmp(argv[0][0], "cd") == 0)
+        else if (argc1 > 1 && strcmp(argvMat[0][0], "cd") == 0)
         {
-            if (chdir(argv[0][1]) != 0)
+            if (chdir(argvMat[0][1]) != 0)
             {
                 perror("chdir failed");
             }
             *need_fork = 0;
         }
-        else if (argc1 == 1 && strcmp(argv[0][0], "quit") == 0)
+        else if (argc1 == 1 && strcmp(argvMat[0][0], "quit") == 0)
         {
             exit(EXIT_SUCCESS);
         }
-        else if (argc1 > 2 && argv[0][argc1 - 2] != NULL && strcmp(argv[0][argc1 - 2], "=") == 0)
+        else if (argc1 > 2 && argvMat[0][argc1 - 2] != NULL && strcmp(argvMat[0][argc1 - 2], "=") == 0)
         {
-            set_variable_value(argv[0][argc1 - 3], argv[0][argc1 - 1]);
+            set_variable_value(argvMat[0][argc1 - 3], argvMat[0][argc1 - 1]);
             *need_fork = 0;
         }
-        else if (argc1 == 2 && strcmp(argv[0][0], "read") == 0)
+        else if (argc1 == 2 && strcmp(argvMat[0][0], "read") == 0)
         {
             char value[MAX_COMMAND_LENGTH];
             if (fgets(value, sizeof(value), stdin) == NULL)
@@ -660,36 +667,27 @@ void expand_commands(char *** argv , int* need_fork , int* argc){
             value[strcspn(value, "\n")] = '\0'; // Remove trailing newline
             // Add a $ before argv1[1] using strcat
             char var_name[MAX_COMMAND_LENGTH] = "$";
-            strcat(var_name, argv[0][1]);
+            strcat(var_name, argvMat[0][1]);
 
             set_variable_value(var_name, value);
             *need_fork = 0;
         }
-        else if (argc1 > 0 && strcmp(argv[0][0], "if") == 0)
+        else if (argc1 > 0 && strcmp(argvMat[0][0], "if") == 0)
         {
-            execute_if_else(argv[0], argc1);
+            execute_if_else(argvMat[0], argc1);
             *need_fork = 0;
         }
 }
 
-int redirect_out, redirect_err, redirect_out_app;
-char *outfile, *errfile;
-char *prompt_name;
-char command[MAX_COMMAND_LENGTH];
-char curr_command[MAX_COMMAND_LENGTH];
-char last_command[MAX_COMMAND_LENGTH] = "";
-int amper;
 
 int main()
 {
-    
-    
     char ***argv;
-    
-    int piping, retid, status;
+    int piping = 0, retid, status;
     int fildes[2];
-    int fildes_prev[2];
-    int fd, fd_err, amper;
+    int fd, fd_err;
+
+    
     prompt_name = malloc(strlen("hello") + 1);
     if (prompt_name == NULL)
     {
@@ -717,20 +715,25 @@ int main()
         piping = 0;
         // Register the signal handler for SIGINT
         signal(SIGINT, handle_sigint);
-
-        command[strlen(command) - 1] = '\0'; // Remove trailing newline
+        command[MAX_COMMAND_LENGTH - 1] = '\0'; // Remove trailing newline
 
         int num_tokens;
-        int need_fork;
         int argc[MAX_SUBCOMMAND_COUNTER] = {0};
-        
+        int needfork = 0;
         /////////
-        parse_command(command, &argv, &piping ,&argc);
-        expand_commands(argv, &need_fork, &argc);
-        if(need_fork == 1){
+        read_input_with_history(command, prompt_name);
+
+        parse_command(command, &argv, &piping, argc);
+
+        expand_commands(&argv, &needfork , argc , command);
+
+        if(needfork == 1){
             continue;
         }
-         /////here
+
+        // Check if the command is empty
+        if (argv[0][0] == NULL)
+            continue;
 
         // Fork and execute the command
         pid_t pid = fork();
@@ -783,7 +786,7 @@ int main()
 
             if (piping)
             {
-
+                
                 if (pipe(fildes) < 0)
                 {
                     perror("pipe failed");
@@ -803,7 +806,8 @@ int main()
                     close(fildes[0]);
                     close(fildes[1]);
                     execvp(argv[0][0], argv[0]);
-                    perror("execvp failed");
+                    
+                    perror("execvp failed-here1");
                     
                     exit(EXIT_FAILURE);
                     
@@ -815,7 +819,7 @@ int main()
                     close(fildes[0]);
                     close(fildes[1]);
                     execvp(argv[1][0], argv[1]);
-                    perror("execvp failed");
+                    perror("execvp failed-here2");
                     
                     exit(EXIT_FAILURE);
                 }
@@ -823,7 +827,7 @@ int main()
             else
             {
                 execvp(argv[0][0], argv[0]);
-                perror("execvp failed");
+                perror("execvp failed-here!");
                 exit(errno);
             }
         }
