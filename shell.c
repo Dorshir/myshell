@@ -13,6 +13,7 @@
 #define MAX_ARG_COUNT 10 // max pipes
 #define MAX_COMMAND_LENGTH 1024 // command length
 #define MAX_SUBCOMMAND_LENGTH 480 //subcommand length
+#define MAX_SUBCOMMAND_COUNTER 10 //subcommand counter
 
 #define MAX_HISTORY_SIZE 20
 #define UP_ARROW 65
@@ -166,7 +167,7 @@ void argvAllocate(char**** argv){
     }
 }
 
-void parse_command(char *command, char ****argv, int *piping) {
+void parse_command(char *command, char ****argv, int *piping , int* argc) {
     int num_tokens;
     char*** argvArray = *argv;
     char **commands = split_string(command, '|', &num_tokens);
@@ -178,11 +179,12 @@ void parse_command(char *command, char ****argv, int *piping) {
             int num_subtokens;
             
             argvArray[i] = split_string(commands[i], ' ', &num_subtokens);
-
+            argc[i] = num_subtokens;
             for (int j = 0; j < num_subtokens; j++) {
                 printf("  Subtoken [%d][%d]: %s\n",i, j, argvArray[i][j]);
             }
-
+            free(argv[i][num_subtokens]);
+            argv[i][num_subtokens] = NULL;
             // free(subtokens); // Free the memory allocated for subtokens
         }
 
@@ -578,20 +580,20 @@ int main()
         }
         strcpy(curr_command, command);
         int num_tokens;
+        int argc[MAX_SUBCOMMAND_COUNTER] = {0};
         
         /////////
-        parse_command(command, &argv, &piping);
-
+        parse_command(command, &argv, &piping,&argc);
+        
         // Check if the command is empty
         if (argv[0][0] == NULL)
             continue;
+        
+        //Check for background execution
+        int argc1 = argc[0];
 
-        // Check for background execution
-        int argc1 = 0;
-        while (argv[0][argc1] != NULL)
-            argc1++;
 
-        if (argc1 > 0 && strcmp(argv[0][argc1 - 1], "&") == 0)
+        if (argc1 > 0 && strcmp(argv[0][argc1 - 2], "&") == 0)
         {
             amper = 1;
             argv[0][argc1 - 1] = NULL;
@@ -600,9 +602,9 @@ int main()
         {
             amper = 0;
         }
-
+        
         add_to_history(curr_command);
-
+        
         // Check for output redirection
         if (argc1 > 2 && strcmp(argv[0][argc1 - 2], ">") == 0)
         {
@@ -628,7 +630,7 @@ int main()
             redirect_out_app = 0;
             redirect_err = 0;
         }
-
+        
         // Check for built-in commands
         if (argc1 > 1 && strcmp(argv[0][0], "prompt") == 0)
         {
@@ -640,9 +642,10 @@ int main()
                 exit(EXIT_FAILURE);
             }
             strcpy(prompt_name, argv[0][argc1 - 1]);
+
             continue;
         }
-
+        
         else if (argc1 > 1 && strcmp(argv[0][0], "echo") == 0)
         {
             if (strcmp(argv[0][1], "$?") == 0)
@@ -771,29 +774,29 @@ int main()
                     perror("fork failed");
                     exit(EXIT_FAILURE);
                 }
-                // if (pipe_pid == 0)
-                // { // First component of the pipe
-                //     close(STDOUT_FILENO);
-                //     dup2(fildes[1], STDOUT_FILENO);
-                //     close(fildes[0]);
-                //     close(fildes[1]);
-                //     execvp(argv[0][0], argv[0]);
-                //     perror("execvp failed");
+                if (pipe_pid == 0)
+                { // First component of the pipe
+                    close(STDOUT_FILENO);
+                    dup2(fildes[1], STDOUT_FILENO);
+                    close(fildes[0]);
+                    close(fildes[1]);
+                    execvp(argv[0][0], argv[0]);
+                    perror("execvp failed");
                     
-                //     exit(EXIT_FAILURE);
+                    exit(EXIT_FAILURE);
                     
-                // }
-                // else
-                // { // Second component of the pipe
-                //     close(STDIN_FILENO);
-                //     dup2(fildes[0], STDIN_FILENO);
-                //     close(fildes[0]);
-                //     close(fildes[1]);
-                //     execvp(argv2[0], argv2);
-                //     perror("execvp failed");
+                }
+                else
+                { // Second component of the pipe
+                    close(STDIN_FILENO);
+                    dup2(fildes[0], STDIN_FILENO);
+                    close(fildes[0]);
+                    close(fildes[1]);
+                    execvp(argv[1][0], argv[1]);
+                    perror("execvp failed");
                     
-                //     exit(EXIT_FAILURE);
-                // }
+                    exit(EXIT_FAILURE);
+                }
             }
             else
             {
