@@ -171,24 +171,26 @@ void parse_command(char *command, char ****argv, int *piping , int* argc) {
     int num_tokens;
     char*** argvArray = *argv;
     char **commands = split_string(command, '|', &num_tokens);
+    if (num_tokens>1)
+    {
+        *piping =1;
+    }
+    
+    for (int i = 0; i < num_tokens; i++) {
+        printf("Command %d: %s\n", i + 1, commands[i]);
 
-        for (int i = 0; i < num_tokens; i++) {
-            printf("Command %d: %s\n", i + 1, commands[i]);
-
-            // Tokenize each command by spaces
-            int num_subtokens;
-            
-            argvArray[i] = split_string(commands[i], ' ', &num_subtokens);
-            argc[i] = num_subtokens;
-            for (int j = 0; j < num_subtokens; j++) {
-                printf("  Subtoken [%d][%d]: %s\n",i, j, argvArray[i][j]);
-            }
-            free(argv[i][num_subtokens]);
-            argv[i][num_subtokens] = NULL;
-            // free(subtokens); // Free the memory allocated for subtokens
+        // Tokenize each command by spaces
+        int num_subtokens;
+        
+        argvArray[i] = split_string(commands[i], ' ', &num_subtokens);
+        argc[i] = num_subtokens;
+        for (int j = 0; j < num_subtokens; j++) {
+            printf("  Subtoken [%d][%d]: %s\n",i, j, argvArray[i][j]);
         }
+        // free(subtokens); // Free the memory allocated for subtokens
+    }
 
-        free(commands); // Free the memory allocated for commands
+    free(commands); // Free the memory allocated for commands
 
 }
 
@@ -593,7 +595,7 @@ int main()
         int argc1 = argc[0];
 
 
-        if (argc1 > 0 && strcmp(argv[0][argc1 - 2], "&") == 0)
+        if (argc1 > 0 && strcmp(argv[0][argc1 - 1], "&") == 0)
         {
             amper = 1;
             argv[0][argc1 - 1] = NULL;
@@ -762,6 +764,7 @@ int main()
 
             if (piping)
             {
+                
                 if (pipe(fildes) < 0)
                 {
                     perror("pipe failed");
