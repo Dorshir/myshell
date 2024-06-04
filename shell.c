@@ -175,7 +175,7 @@ void argvAllocate(char**** argv){
     }
 }
 
-void parse_command(char *command, char ****argv, int *piping , int* argc) {
+void parse_command(char *command, char ****argv, int *piping , int* argc , int* argv_count) {
     int num_tokens;
     char*** argvArray = *argv;
     char **commands = split_string(command, '|', &num_tokens);
@@ -183,10 +183,10 @@ void parse_command(char *command, char ****argv, int *piping , int* argc) {
     {
         *piping =1;
     }
-    
+    *argv_count = num_tokens;
     for (int i = 0; i < num_tokens; i++) {
         printf("Command %d: %s\n", i + 1, commands[i]);
-
+        
         // Tokenize each command by spaces
         int num_subtokens;
         
@@ -685,6 +685,7 @@ int main()
     char ***argv;
     int piping = 0, retid, status;
     int fildes[2];
+    int fildes_prev[2];
     int fd, fd_err;
 
     
@@ -719,14 +720,15 @@ int main()
 
         int num_tokens;
         int argc[MAX_SUBCOMMAND_COUNTER] = {0};
+        int argv_count;
         int needfork = 0;
         /////////
         read_input_with_history(command, prompt_name);
 
-        parse_command(command, &argv, &piping, argc);
+        parse_command(command, &argv, &piping, argc , &argv_count);
 
         expand_commands(&argv, &needfork , argc , command);
-
+ 
         if(needfork == 1){
             continue;
         }
@@ -735,138 +737,86 @@ int main()
         if (argv[0][0] == NULL)
             continue;
 
-        // Fork and execute the command
-        pid_t pid = fork();
-        if (pid < 0)
-        {
-            perror("fork failed");
-            continue;
-        }
+        for (int i = 0; i < argv_count; i++) {
 
-        if (pid == 0)
-        { // Child process
+            expand_commands(&argv, &needfork , argc , command);
 
-            // Set the process group ID for the child process
-            setpgid(0, 0);
-            if (redirect_out)
-            {
-                fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0660);
-                if (fd < 0)
-                {
-                    perror("open failed");
-                    exit(EXIT_FAILURE);
+            if (i < argv_count - 1) {
+                // Create a pipe
+                if (pipe(fildes) == -1) {
+                    perror("pipe");
+                    exit(1);
                 }
-                dup2(fd, STDOUT_FILENO);
-                close(fd);
             }
 
-            if (redirect_out_app)
-            {
-                fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
-                if (fd < 0)
-                {
-                    perror("open failed");
-                    exit(EXIT_FAILURE);
+            // Fork a child process
+            pid = fork();
+            if (pid == 0) {
+                // Child process
+                if (i > 0) {
+                    // Redirect input from the previous pipe
+                    dup2(fildes_prev[0], STDIN_FILENO);
+                    close(fildes_prev[0]);
+                    close(fildes_prev[1]);
                 }
-                dup2(fd, STDOUT_FILENO);
-                close(fd);
-            }
-
-            if (redirect_err)
-            {
-                fd_err = open(errfile, O_WRONLY | O_CREAT | O_TRUNC, 0660);
-                if (fd_err < 0)
-                {
-                    perror("open errfile failed");
-                    exit(EXIT_FAILURE);
-                }
-                dup2(fd_err, STDERR_FILENO);
-                close(fd_err);
-            }
-
-            if (piping)
-            {
-                
-                if (pipe(fildes) < 0)
-                {
-                    perror("pipe failed");
-                    exit(EXIT_FAILURE);
-                }
-
-                pid_t pipe_pid = fork();
-                if (pipe_pid < 0)
-                {
-                    perror("fork failed");
-                    exit(EXIT_FAILURE);
-                }
-                if (pipe_pid == 0)
-                { // First component of the pipe
-                    close(STDOUT_FILENO);
+                if (i < argv_count - 1) {
+                    // Redirect output to the next pipe
+                    close(fildes[0]);
                     dup2(fildes[1], STDOUT_FILENO);
-                    close(fildes[0]);
                     close(fildes[1]);
-                    execvp(argv[0][0], argv[0]);
-                    
-                    perror("execvp failed-here1");
-                    
-                    exit(EXIT_FAILURE);
-                    
                 }
-                else
-                { // Second component of the pipe
-                    close(STDIN_FILENO);
-                    dup2(fildes[0], STDIN_FILENO);
-                    close(fildes[0]);
-                    close(fildes[1]);
-                    execvp(argv[1][0], argv[1]);
-                    perror("execvp failed-here2");
-                    
-                    exit(EXIT_FAILURE);
+
+                // Handle output redirection
+                if (redirect_out) {
+                    fd = creat(outfile, 0660);
+                    close(STDOUT_FILENO);
+                    dup(fd);
+                    close(fd);
+                } else if (redirect_err) {
+                    fd_err = creat(errfile, 0660);
+                    close(STDERR_FILENO);
+                    dup(fd_err);
+                    close(fd_err);
+                } else if (redirect_out_app) {
+                    fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
+                    close(STDOUT_FILENO);
+                    dup(fd);
+                    close(fd);
                 }
-            }
-            else
-            {
-                execvp(argv[0][0], argv[0]);
-                perror("execvp failed-here!");
-                exit(errno);
-            }
-        }
 
-        // Parent process waits for the child if not running in background
-        if (!amper)
-        {
-            // Set the process group ID for the parent process
-            setpgid(pid, pid);
+                if (execvp(argv[i][0], argv[i]) == -1) {
+                    fprintf(stderr, "Command execution failed: %s\n", strerror(errno));
+                    exit(errno);
+                }
+            } else if (pid > 0) {
+                // Parent process
+                if (i > 0) {
+                    // Close the previous pipe
+                    close(fildes_prev[0]);
+                    close(fildes_prev[1]);
+                }
+                if (i < argv_count - 1) {
+                    // Save the current pipe for the next iteration
+                    fildes_prev[0] = fildes[0];
+                    fildes_prev[1] = fildes[1];
+                }
 
-            retid = waitpid(pid, &status, WUNTRACED);
-            if (retid < 0)
-            {
-                perror("waitpid failed");
+                // Wait for the child process to finish
+                if (!amper) {
+                    waitpid(pid, &status, 0);
+                    last_exit_status = WEXITSTATUS(status);
+                } else {
+                    printf("Process with PID %d is running in the background\n", pid);
+                }
+            } else {
+                perror("fork");
+                exit(1);
             }
-            else if (WIFEXITED(status))
-            {
-                last_exit_status = WEXITSTATUS(status);
-            }
-            else
-            {
-                last_exit_status = -1; // Indicate an abnormal termination
-            }
-            // Reset the process IDs
-            pid = -1;
-            pipe_pid = -1;
-        }
-
-        // Restore stderr to the original file descriptor if it was redirected
-        if (redirect_err)
-        {
-            dup2(original_stderr, STDERR_FILENO);
-            redirect_err = 0;
         }
     }
-
     // Close the original stderr file descriptor
     close(original_stderr);
     free(prompt_name);
 
     return 0;
-}
+    }
