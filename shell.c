@@ -8,9 +8,12 @@
 #include <string.h>
 #include <signal.h>
 #include <termios.h>
+#include <ctype.h>
 
-#define MAX_COMMAND_LENGTH 1024
-#define MAX_ARG_COUNT 10
+#define MAX_ARG_COUNT 10 // max pipes
+#define MAX_COMMAND_LENGTH 1024 // command length
+#define MAX_SUBCOMMAND_LENGTH 480 //subcommand length
+
 #define MAX_HISTORY_SIZE 20
 #define UP_ARROW 65
 #define DOWN_ARROW 66
@@ -83,40 +86,108 @@ void handle_sigint()
     }
 }
 
-void parse_command(char *command, char **argv1, char **argv2, int *piping)
-{
-    char *token;
-    int i = 0;
-    *piping = 0;
+// Function to trim leading and trailing spaces
+char *trim(char *str) {
+    char *end;
 
-    // First part of the command
-    token = strtok(command, " ");
-    while (token != NULL)
+    // Trim leading space
+    while (isspace((unsigned char)*str)) str++;
+
+    if (*str == 0) return str; // All spaces?
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator
+    *(end + 1) = 0;
+
+    return str;
+}
+
+// Custom function to duplicate a string
+char *my_strdup(const char *s) {
+    size_t len = strlen(s) + 1;
+    char *dup = malloc(len);
+    if (dup) {
+        memcpy(dup, s, len);
+    }
+    return dup;
+}
+
+// Function to split a string by a delimiter and handle multiple spaces
+char **split_string(const char *str, const char delimiter, int *num_tokens) {
+    int count = 0;
+    const char *temp = str;
+
+    // Count the number of delimiters
+    while (*temp) {
+        if (*temp == delimiter) count++;
+        temp++;
+    }
+
+    // Allocate memory for tokens
+    char **tokens = malloc((count + 1) * sizeof(char *));
+    if (tokens == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    int index = 0;
+    char *start = my_strdup(str); // Duplicate the input string
+    if (start == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        free(tokens);
+        exit(EXIT_FAILURE);
+    }
+
+    char *end = strchr(start, delimiter);
+    while (end != NULL) {
+        *end = '\0';
+        tokens[index++] = trim(start);
+        start = end + 1;
+        end = strchr(start, delimiter);
+    }
+    tokens[index++] = trim(start);
+
+    *num_tokens = index;
+    return tokens;
+}
+
+void argvAllocate(char**** argv){
+    char*** argvVal = *argv;
+    for (int i = 0; i < MAX_ARG_COUNT; i++)
     {
-        argv1[i] = token;
-        token = strtok(NULL, " ");
-        i++;
-        if (token && strcmp(token, "|") == 0)
+        argvVal[i] = (char**)(malloc(sizeof(char*) * 10));
+        for (int j = 0; j < MAX_COMMAND_LENGTH; j++)
         {
-            *piping = 1;
-            break;
+            argvVal[i][j] = (char*)(malloc(sizeof(char*) * MAX_SUBCOMMAND_LENGTH));
         }
     }
-    argv1[i] = NULL;
+}
 
-    // Second part of the command if piping
-    if (*piping)
-    {
-        i = 0;
-        token = strtok(NULL, " ");
-        while (token != NULL)
-        {
-            argv2[i] = token;
-            token = strtok(NULL, " ");
-            i++;
+void parse_command(char *command, char ****argv, int *piping) {
+    int num_tokens;
+    char*** argvArray = *argv;
+    char **commands = split_string(command, '|', &num_tokens);
+
+        for (int i = 0; i < num_tokens; i++) {
+            printf("Command %d: %s\n", i + 1, commands[i]);
+
+            // Tokenize each command by spaces
+            int num_subtokens;
+            
+            argvArray[i] = split_string(commands[i], ' ', &num_subtokens);
+
+            for (int j = 0; j < num_subtokens; j++) {
+                printf("  Subtoken [%d][%d]: %s\n",i, j, argvArray[i][j]);
+            }
+
+            // free(subtokens); // Free the memory allocated for subtokens
         }
-        argv2[i] = NULL;
-    }
+
+        free(commands); // Free the memory allocated for commands
+
 }
 
 char *get_variable_value(const char *name)
@@ -454,7 +525,7 @@ int main()
 {
     char command[MAX_COMMAND_LENGTH];
     char curr_command[MAX_COMMAND_LENGTH];
-    char *argv1[MAX_ARG_COUNT], *argv2[MAX_ARG_COUNT];
+    char ***argv;
     char last_command[MAX_COMMAND_LENGTH] = "";
     int piping, retid, status;
     int fildes[2];
@@ -466,6 +537,13 @@ int main()
         perror("Memory allocation failed");
         exit(EXIT_FAILURE);
     }
+
+    argv = (char ***)malloc(MAX_ARG_COUNT * sizeof(char **));
+    if (argv == NULL) {
+        fprintf(stderr, "Memory allocation failed for argv\n");
+        return 1; // Return error code
+    }
+    argvAllocate(&argv);
 
     strcpy(prompt_name, "hello");
 
@@ -499,21 +577,24 @@ int main()
             strcpy(last_command, command); // Store the current command as the last command
         }
         strcpy(curr_command, command);
-        parse_command(command, argv1, argv2, &piping);
+        int num_tokens;
+        
+        /////////
+        parse_command(command, &argv, &piping);
 
         // Check if the command is empty
-        if (argv1[0] == NULL)
+        if (argv[0][0] == NULL)
             continue;
 
         // Check for background execution
         int argc1 = 0;
-        while (argv1[argc1] != NULL)
+        while (argv[0][argc1] != NULL)
             argc1++;
 
-        if (argc1 > 0 && strcmp(argv1[argc1 - 1], "&") == 0)
+        if (argc1 > 0 && strcmp(argv[0][argc1 - 1], "&") == 0)
         {
             amper = 1;
-            argv1[argc1 - 1] = NULL;
+            argv[0][argc1 - 1] = NULL;
         }
         else
         {
@@ -523,23 +604,23 @@ int main()
         add_to_history(curr_command);
 
         // Check for output redirection
-        if (argc1 > 2 && strcmp(argv1[argc1 - 2], ">") == 0)
+        if (argc1 > 2 && strcmp(argv[0][argc1 - 2], ">") == 0)
         {
             redirect_out = 1;
-            argv1[argc1 - 2] = NULL;
-            outfile = argv1[argc1 - 1];
+            argv[0][argc1 - 2] = NULL;
+            outfile = argv[0][argc1 - 1];
         }
-        else if (argc1 > 2 && strcmp(argv1[argc1 - 2], "2>") == 0)
+        else if (argc1 > 2 && strcmp(argv[0][argc1 - 2], "2>") == 0)
         {
             redirect_err = 1;
-            argv1[argc1 - 2] = NULL;
-            errfile = argv1[argc1 - 1];
+            argv[0][argc1 - 2] = NULL;
+            errfile = argv[0][argc1 - 1];
         }
-        else if (argc1 > 2 && strcmp(argv1[argc1 - 2], ">>") == 0)
+        else if (argc1 > 2 && strcmp(argv[0][argc1 - 2], ">>") == 0)
         {
             redirect_out_app = 1;
-            argv1[argc1 - 2] = NULL;
-            outfile = argv1[argc1 - 1];
+            argv[0][argc1 - 2] = NULL;
+            outfile = argv[0][argc1 - 1];
         }
         else
         {
@@ -549,63 +630,63 @@ int main()
         }
 
         // Check for built-in commands
-        if (argc1 > 1 && strcmp(argv1[0], "prompt") == 0)
+        if (argc1 > 1 && strcmp(argv[0][0], "prompt") == 0)
         {
-            free(prompt_name); // Free the previous prompt name memory
-            prompt_name = malloc(strlen(argv1[argc1 - 1]) + 1);
+            free(prompt_name); // Free the previous prompt name memor
+            prompt_name = malloc(strlen(argv[0][argc1 - 1]) + 1);
             if (prompt_name == NULL)
             {
                 perror("Memory allocation failed");
                 exit(EXIT_FAILURE);
             }
-            strcpy(prompt_name, argv1[argc1 - 1]);
+            strcpy(prompt_name, argv[0][argc1 - 1]);
             continue;
         }
 
-        else if (argc1 > 1 && strcmp(argv1[0], "echo") == 0)
+        else if (argc1 > 1 && strcmp(argv[0][0], "echo") == 0)
         {
-            if (strcmp(argv1[1], "$?") == 0)
+            if (strcmp(argv[0][1], "$?") == 0)
             {
                 printf("%d \n", last_exit_status);
             }
             else
             {
                 // Check for variable substitution
-                for (int i = 0; argv1[i] != NULL; i++)
+                for (int i = 0; argv[0][i] != NULL; i++)
                 {
-                    char *value = get_variable_value(argv1[i]);
+                    char *value = get_variable_value(argv[0][i]);
                     if (value != NULL)
                     {
-                        argv1[i] = value;
+                        argv[0][i] = value;
                     }
                 }
 
                 for (int i = 1; i < argc1; i++)
                 {
-                    printf("%s ", argv1[i]);
+                    printf("%s ", argv[0][i]);
                 }
                 printf("\n");
             }
             continue;
         }
-        else if (argc1 > 1 && strcmp(argv1[0], "cd") == 0)
+        else if (argc1 > 1 && strcmp(argv[0][0], "cd") == 0)
         {
-            if (chdir(argv1[1]) != 0)
+            if (chdir(argv[0][1]) != 0)
             {
                 perror("chdir failed");
             }
             continue;
         }
-        else if (argc1 == 1 && strcmp(argv1[0], "quit") == 0)
+        else if (argc1 == 1 && strcmp(argv[0][0], "quit") == 0)
         {
             exit(EXIT_SUCCESS);
         }
-        else if (argc1 > 2 && argv1[argc1 - 2] != NULL && strcmp(argv1[argc1 - 2], "=") == 0)
+        else if (argc1 > 2 && argv[0][argc1 - 2] != NULL && strcmp(argv[0][argc1 - 2], "=") == 0)
         {
-            set_variable_value(argv1[argc1 - 3], argv1[argc1 - 1]);
+            set_variable_value(argv[0][argc1 - 3], argv[0][argc1 - 1]);
             continue;
         }
-        else if (argc1 == 2 && strcmp(argv1[0], "read") == 0)
+        else if (argc1 == 2 && strcmp(argv[0][0], "read") == 0)
         {
             char value[MAX_COMMAND_LENGTH];
             if (fgets(value, sizeof(value), stdin) == NULL)
@@ -616,14 +697,14 @@ int main()
             value[strcspn(value, "\n")] = '\0'; // Remove trailing newline
             // Add a $ before argv1[1] using strcat
             char var_name[MAX_COMMAND_LENGTH] = "$";
-            strcat(var_name, argv1[1]);
+            strcat(var_name, argv[0][1]);
 
             set_variable_value(var_name, value);
             continue;
         }
-        else if (argc1 > 0 && strcmp(argv1[0], "if") == 0)
+        else if (argc1 > 0 && strcmp(argv[0][0], "if") == 0)
         {
-            execute_if_else(argv1, argc1);
+            execute_if_else(argv[0], argc1);
             continue;
         }
 
@@ -666,7 +747,6 @@ int main()
 
             if (redirect_err)
             {
-                printf("hello");
                 fd_err = open(errfile, O_WRONLY | O_CREAT | O_TRUNC, 0660);
                 if (fd_err < 0)
                 {
@@ -684,36 +764,40 @@ int main()
                     perror("pipe failed");
                     exit(EXIT_FAILURE);
                 }
+
                 pid_t pipe_pid = fork();
                 if (pipe_pid < 0)
                 {
                     perror("fork failed");
                     exit(EXIT_FAILURE);
                 }
-                if (pipe_pid == 0)
-                { // First component of the pipe
-                    close(STDOUT_FILENO);
-                    dup2(fildes[1], STDOUT_FILENO);
-                    close(fildes[0]);
-                    close(fildes[1]);
-                    execvp(argv1[0], argv1);
-                    perror("execvp failed");
-                    exit(EXIT_FAILURE);
-                }
-                else
-                { // Second component of the pipe
-                    close(STDIN_FILENO);
-                    dup2(fildes[0], STDIN_FILENO);
-                    close(fildes[0]);
-                    close(fildes[1]);
-                    execvp(argv2[0], argv2);
-                    perror("execvp failed");
-                    exit(EXIT_FAILURE);
-                }
+                // if (pipe_pid == 0)
+                // { // First component of the pipe
+                //     close(STDOUT_FILENO);
+                //     dup2(fildes[1], STDOUT_FILENO);
+                //     close(fildes[0]);
+                //     close(fildes[1]);
+                //     execvp(argv[0][0], argv[0]);
+                //     perror("execvp failed");
+                    
+                //     exit(EXIT_FAILURE);
+                    
+                // }
+                // else
+                // { // Second component of the pipe
+                //     close(STDIN_FILENO);
+                //     dup2(fildes[0], STDIN_FILENO);
+                //     close(fildes[0]);
+                //     close(fildes[1]);
+                //     execvp(argv2[0], argv2);
+                //     perror("execvp failed");
+                    
+                //     exit(EXIT_FAILURE);
+                // }
             }
             else
             {
-                execvp(argv1[0], argv1);
+                execvp(argv[0][0], argv[0]);
                 perror("execvp failed");
                 exit(errno);
             }
