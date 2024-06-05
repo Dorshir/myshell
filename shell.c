@@ -191,6 +191,7 @@ void parse_command(char *command, char ****argv, int *argc, int *argv_count)
 {
     int num_tokens;
     char ***argvArray = *argv;
+    printf("Command: %s\n", command);
     char **commands = split_string(command, '|', &num_tokens);
 
     *argv_count = num_tokens;
@@ -376,9 +377,7 @@ void read_input_with_history(char *command, const char *prompt_name)
 
 void handle_pipes(char ***argv, int *argc, int argv_count)
 {
-    //if ls | wc then echo bar else echo for fi
-    printf("argv[0]: \n",argv[0][0]);
-    printf("argv[1]: \n",argv[1][0]);
+    // if ls | wc then echo bar else echo for fi
     int fildes[2];
     int fildes_prev[2];
     int status;
@@ -458,15 +457,15 @@ void handle_pipes(char ***argv, int *argc, int argv_count)
                 fildes_prev[1] = fildes[1];
             }
 
-            //ls
-            //if true then !! else echo bar fi
-            //work without fi
+            // ls
+            // if true then !! else echo bar fi
+            // work without fi
 
             // Wait for the child process to finish
             if (!amper)
             {
                 waitpid(pid, &status, 0);
-                last_exit_status = WEXITSTATUS(status);
+                last_exit_status = status;
             }
             else
             {
@@ -481,11 +480,11 @@ void handle_pipes(char ***argv, int *argc, int argv_count)
     }
 }
 
-void execute_if_else(char* command)
+void execute_if_else(char *command)
 {
-    printf("command : %s\n",command);
+    printf("command : %s\n", command);
     int argc;
-    char ** argv1 = split_string(command, ' ' ,&argc);
+    char **argv1 = split_string(command, ' ', &argc);
 
     if (argc < 5 || strcmp(argv1[0], "if") != 0)
     {
@@ -513,8 +512,9 @@ void execute_if_else(char* command)
             fi_index = i;
         }
     }
-    
-    if(then_index == -1 || else_index == -1 || fi_index == -1){
+
+    if (then_index == -1 || else_index == -1 || fi_index == -1)
+    {
         fprintf(stderr, "Invalid if statement syntax: must be then , else and fi\n");
         return;
     }
@@ -531,48 +531,44 @@ void execute_if_else(char* command)
         fprintf(stderr, "Invalid if statement syntax: 'else' must come before 'fi'\n");
         return;
     }
-    
 
     // Extract the condition
-    char *condition_argv[MAX_ARG_COUNT];
+    char condition[MAX_COMMAND_LENGTH] = "";
     for (int i = 1; i < then_index; i++)
     {
-        condition_argv[i - 1] = argv1[i];
+        strcat(condition, argv1[i]);
+        if (i < then_index - 1)
+        {
+            strcat(condition, " ");
+        }
     }
-    condition_argv[then_index - 1] = NULL;
-    
+    // condition[then_index - 1] = '\0';
+
     int argc1[MAX_SUBCOMMAND_COUNTER] = {0};
     int argv_count;
     char ***argv;
-    
 
-    parse_command(condition_argv, &argv, argc1, &argv_count);
-    printf("argv[0]: \n",argv[0][0]);
-    printf("argv[1]: \n",argv[1][0]);
-    exit(1);
-    // Execute the condition command
-    handle_pipes(argv,argc1,argv_count);
+    argv = (char ***)malloc(MAX_ARG_COUNT * sizeof(char **));
+    if (argv == NULL)
+    {
+        fprintf(stderr, "Memory allocation failed for argv\n");
+        return; // Return error code
+    }
+    argvAllocate(&argv);
 
-    // int status;
-    // pid_t pid = fork();
-    // if (pid == 0)
-    // {
-    //     execvp(condition_argv[0], condition_argv);
-    //     perror("execvp failed");
-    //     exit(EXIT_FAILURE);
-    // }
-    // else if (pid > 0)
-    // {
-    //     waitpid(pid, &status, 0);
-    // }
-    // else
-    // {
-    //     perror("fork failed");
-    //     return;
-    // }
-    
+    printf("Condition: %s\n", condition);
+    parse_command(condition, &argv, argc1, &argv_count);
+
+    // Redirect stdout so it wont be presented
+    int fd = creat(outfile, 0660);
+    dup2(fd, STDOUT_FILENO);
+    close(fd);
+
+    // // Execute the condition command
+    handle_pipes(argv, argc1, argv_count);
+
     // Check the condition command's exit status
-    if (last_exit_status)
+    if (WIFEXITED(last_exit_status))
     {
         int condition_exit_status = last_exit_status;
         if (condition_exit_status == 0)
@@ -871,7 +867,7 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
 int main()
 {
     char ***argv;
-    int  retid, status;
+    int retid, status;
     int fd, fd_err;
 
     prompt_name = malloc(strlen("hello") + 1);
@@ -916,19 +912,16 @@ int main()
         if (argv[0][0] == NULL)
             continue;
 
-        
         // Handle if-else statements
         if (argc[0] > 0 && strcmp(argv[0][0], "if") == 0)
         {
             execute_if_else(command);
-            
+
             needfork = 0;
         }
 
         // Expand commands
         expand_commands(&argv, &needfork, argc, command);
-
-        
 
         if (needfork == 0)
         {
