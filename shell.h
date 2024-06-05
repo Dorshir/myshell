@@ -32,7 +32,6 @@ void handle_pipes(char ***argv, int argv_count);
 void execute_if_else(char *command);
 void expand_commands(char ****argv, int *need_fork, int *argc, char *command);
 
-
 #define MAX_ARG_COUNT 10          // max pipes
 #define MAX_COMMAND_LENGTH 1024   // command length
 #define MAX_SUBCOMMAND_LENGTH 480 // subcommand length
