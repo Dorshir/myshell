@@ -481,14 +481,12 @@ void handle_pipes(char ***argv, int *argc, int argv_count)
     }
 }
 
-void execute_if_else(char* command, int argc)
+void execute_if_else(char* command)
 {
     printf("command : %s\n",command);
-    int numtokens;
-    char ** argv1 = split_string(command, ' ' ,&numtokens);
-    // printf("argv1[0] : %s\n",argv1[0]);
-    // printf("argv1[1] : %s\n",argv1[1]);
-    // printf("argv1[2] : %s\n",argv1[2]);
+    int argc;
+    char ** argv1 = split_string(command, ' ' ,&argc);
+
     if (argc < 5 || strcmp(argv1[0], "if") != 0)
     {
         fprintf(stderr, "Invalid if statement syntax\n");
@@ -542,12 +540,14 @@ void execute_if_else(char* command, int argc)
         condition_argv[i - 1] = argv1[i];
     }
     condition_argv[then_index - 1] = NULL;
-
+    
+    
     // Execute the condition command
     int status;
     pid_t pid = fork();
     if (pid == 0)
     {
+
         execvp(condition_argv[0], condition_argv);
         perror("execvp failed");
         exit(EXIT_FAILURE);
@@ -912,7 +912,7 @@ int main()
         // Handle if-else statements
         if (argc[0] > 0 && strcmp(argv[0][0], "if") == 0)
         {
-            execute_if_else(command, argc[0]);
+            execute_if_else(command);
             
             needfork = 0;
         }
