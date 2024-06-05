@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c11
 
 # Define the target executable
-TARGET = shell
+TARGET = myshell
 
 # Define the source files
 SRCS = shell.c
