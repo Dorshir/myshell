@@ -5,10 +5,11 @@ CC = gcc
 CFLAGS = -Wall -Wextra -pedantic -std=c11
 
 # Define the target executable
-TARGET = shell
+TARGET = myshell
 
 # Define the source files
-SRCS = shell.c
+SRCS = myshell.c
+HEADERS = myshell.h
 
 # Define the object files
 OBJS = $(SRCS:.c=.o)
@@ -18,7 +19,7 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
 
 # Rule to build object files
-%.o: %.c
+%.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Rule to clean the build
