@@ -1,0 +1,12 @@
+check.c
+colors.txt
+logger
+logger2.txt
+logger.txt
+log.txt
+Makefile
+README.md
+shell
+shell.c
+shell.o
+stam

@@ -377,7 +377,7 @@ void read_input_with_history(char *command, const char *prompt_name)
     disable_raw_mode();
 }
 
-void handle_pipes(char ***argv, int *argc, int argv_count, int redirect_out, char *outfile, int redirect_err, char *errfile, int redirect_out_app, int amper)
+void handle_pipes(char ***argv, int *argc, int argv_count)
 {
     int fildes[2];
     int fildes_prev[2];
@@ -458,6 +458,10 @@ void handle_pipes(char ***argv, int *argc, int argv_count, int redirect_out, cha
                 fildes_prev[1] = fildes[1];
             }
 
+            //ls
+            //if true then !! else echo bar fi
+            //work without fi
+
             // Wait for the child process to finish
             if (!amper)
             {
@@ -477,10 +481,15 @@ void handle_pipes(char ***argv, int *argc, int argv_count, int redirect_out, cha
     }
 }
 
-void execute_if_else(char ****argv, int argc)
+void execute_if_else(char* command, int argc)
 {
-    char **argvFirstCom = (*argv)[0];
-    if (argc < 5 || strcmp(argvFirstCom[0], "if") != 0)
+    printf("command : %s\n",command);
+    int numtokens;
+    char ** argv1 = split_string(command, ' ' ,&numtokens);
+    // printf("argv1[0] : %s\n",argv1[0]);
+    // printf("argv1[1] : %s\n",argv1[1]);
+    // printf("argv1[2] : %s\n",argv1[2]);
+    if (argc < 5 || strcmp(argv1[0], "if") != 0)
     {
         fprintf(stderr, "Invalid if statement syntax\n");
         return;
@@ -493,32 +502,44 @@ void execute_if_else(char ****argv, int argc)
     // Find the positions of 'then', 'else', and 'fi' in the argument list
     for (int i = 1; i < argc; i++)
     {
-        if (strcmp(argvFirstCom[i], "then") == 0)
+        if (strcmp(argv1[i], "then") == 0)
         {
             then_index = i;
         }
-        else if (strcmp(argvFirstCom[i], "else") == 0)
+        else if (strcmp(argv1[i], "else") == 0)
         {
             else_index = i;
         }
-        else if (strcmp(argvFirstCom[i], "fi") == 0)
+        else if (strcmp(argv1[i], "fi") == 0)
         {
             fi_index = i;
         }
     }
+    
+    if(then_index == -1 || else_index == -1 || fi_index == -1){
+        fprintf(stderr, "Invalid if statement syntax: must be then , else and fi\n");
+        return;
+    }
 
     // Ensure 'then' comes before 'else' if both are present
-    if (else_index != -1 && then_index > else_index)
+    if (then_index > else_index)
     {
         fprintf(stderr, "Invalid if statement syntax: 'then' must come before 'else'\n");
         return;
     }
 
+    if (else_index > fi_index)
+    {
+        fprintf(stderr, "Invalid if statement syntax: 'else' must come before 'fi'\n");
+        return;
+    }
+    
+
     // Extract the condition
     char *condition_argv[MAX_ARG_COUNT];
     for (int i = 1; i < then_index; i++)
     {
-        condition_argv[i - 1] = argvFirstCom[i];
+        condition_argv[i - 1] = argv1[i];
     }
     condition_argv[then_index - 1] = NULL;
 
@@ -556,9 +577,9 @@ void execute_if_else(char ****argv, int argc)
                     // Execute the 'then' block
                     char *then_argv[MAX_ARG_COUNT];
                     int then_argc = 0;
-                    while (argvFirstCom[i] != NULL && strcmp(argvFirstCom[i], "else") != 0)
+                    while (argv1[i] != NULL && strcmp(argv1[i], "else") != 0)
                     {
-                        then_argv[then_argc++] = argvFirstCom[i++];
+                        then_argv[then_argc++] = argv1[i++];
                     }
                     then_argv[then_argc] = NULL;
 
@@ -603,9 +624,9 @@ void execute_if_else(char ****argv, int argc)
                     // Execute the 'then' block
                     char *then_argv[MAX_ARG_COUNT];
                     int then_argc = 0;
-                    while (argvFirstCom[i] != NULL && strcmp(argvFirstCom[i], "fi") != 0)
+                    while (argv1[i] != NULL && strcmp(argv1[i], "fi") != 0)
                     {
-                        then_argv[then_argc++] = argvFirstCom[i++];
+                        then_argv[then_argc++] = argv1[i++];
                     }
                     then_argv[then_argc] = NULL;
 
@@ -651,9 +672,9 @@ void execute_if_else(char ****argv, int argc)
                 // Execute the 'else' block
                 char *else_argv[MAX_ARG_COUNT];
                 int else_argc = 0;
-                while (argvFirstCom[i] != NULL && strcmp(argvFirstCom[i], "fi") != 0)
+                while (argv1[i] != NULL && strcmp(argv1[i], "fi") != 0)
                 {
-                    else_argv[else_argc++] = argvFirstCom[i++];
+                    else_argv[else_argc++] = argv1[i++];
                 }
                 else_argv[else_argc] = NULL;
 
@@ -887,15 +908,19 @@ int main()
         if (argv[0][0] == NULL)
             continue;
 
-        // Expand commands
-        expand_commands(&argv, &needfork, argc, command);
-
+        
         // Handle if-else statements
         if (argc[0] > 0 && strcmp(argv[0][0], "if") == 0)
         {
-            execute_if_else(&argv, argc[0]);
+            execute_if_else(command, argc[0]);
+            
             needfork = 0;
         }
+
+        // Expand commands
+        expand_commands(&argv, &needfork, argc, command);
+
+        
 
         if (needfork == 0)
         {
@@ -903,7 +928,7 @@ int main()
         }
 
         // Handle the piping commands
-        handle_pipes(argv, argc, argv_count, redirect_out, outfile, redirect_err, errfile, redirect_out_app, amper);
+        handle_pipes(argv, argc, argv_count);
     }
 
     // Close the original stderr file descriptor
