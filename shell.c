@@ -377,9 +377,9 @@ void read_input_with_history(char *command, const char *prompt_name)
     disable_raw_mode();
 }
 
-void execute_if_else(char **** argv, int argc)
+void execute_if_else(char ****argv, int argc)
 {
-    char** argvFirstCom = (*argv)[0];
+    char **argvFirstCom = (*argv)[0];
     if (argc < 5 || strcmp(argvFirstCom[0], "if") != 0)
     {
         fprintf(stderr, "Invalid if statement syntax\n");
@@ -461,14 +461,22 @@ void execute_if_else(char **** argv, int argc)
                         then_argv[then_argc++] = argvFirstCom[i++];
                     }
                     then_argv[then_argc] = NULL;
+
+                    // Create a temporary 3D array to pass to expand_commands
+                    char ****temp_argv = (char ****)malloc(sizeof(char ***));
+                    *temp_argv = (char ***)malloc(sizeof(char **));
+                    (*temp_argv)[0] = then_argv;
+
                     int need_fork = 1;
-                    
-                    expand_commands(&argv, &need_fork, &then_argc, then_argv);
-                    // we are here !!!!
-                    if(need_fork == 0)
+                    expand_commands(temp_argv, &need_fork, &then_argc, then_argv[0]);
+                    free(*temp_argv);
+                    free(temp_argv);
+
+                    if (need_fork == 0)
                     {
                         continue;
                     }
+
                     pid_t then_pid = fork();
                     if (then_pid == 0)
                     {
@@ -500,6 +508,21 @@ void execute_if_else(char **** argv, int argc)
                         then_argv[then_argc++] = argvFirstCom[i++];
                     }
                     then_argv[then_argc] = NULL;
+
+                    // Create a temporary 3D array to pass to expand_commands
+                    char ****temp_argv = (char ****)malloc(sizeof(char ***));
+                    *temp_argv = (char ***)malloc(sizeof(char **));
+                    (*temp_argv)[0] = then_argv;
+
+                    int need_fork = 1;
+                    expand_commands(temp_argv, &need_fork, &then_argc, then_argv[0]);
+                    free(*temp_argv);
+                    free(temp_argv);
+
+                    if (need_fork == 0)
+                    {
+                        continue;
+                    }
 
                     pid_t then_pid = fork();
                     if (then_pid == 0)
@@ -534,6 +557,21 @@ void execute_if_else(char **** argv, int argc)
                 }
                 else_argv[else_argc] = NULL;
 
+                // Create a temporary 3D array to pass to expand_commands
+                char ****temp_argv = (char ****)malloc(sizeof(char ***));
+                *temp_argv = (char ***)malloc(sizeof(char **));
+                (*temp_argv)[0] = else_argv;
+
+                int need_fork = 1;
+                expand_commands(temp_argv, &need_fork, &else_argc, else_argv[0]);
+                free(*temp_argv);
+                free(temp_argv);
+
+                if (need_fork == 0)
+                {
+                    continue;
+                }
+
                 pid_t else_pid = fork();
                 if (else_pid == 0)
                 {
@@ -566,13 +604,11 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
         {
             printf("No previous command to repeat.\n");
             *need_fork = 0;
+            return;
         }
         strcpy(command, last_command);
         int num_subtokens;
         argvMat[0] = split_string(last_command, ' ', &num_subtokens);
-        // printf("%s\n",argvMat[0][0]);
-        // printf("%s\n",argvMat[0][1]);
-        // printf("%s\n",argvMat[0][2]);
     }
     else
     {
@@ -582,12 +618,14 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
 
     // Check if the command is empty
     if (argvMat[0][0] == NULL)
+    {
         *need_fork = 0;
-
-    // Check for background execution
+        return;
+    }
 
     int argc1 = argc[0];
 
+    // Check for background execution
     if (argc1 > 0 && strcmp(argvMat[0][argc1 - 1], "&") == 0)
     {
         amper = 1;
@@ -629,7 +667,7 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
     // Check for built-in commands
     if (argc1 > 1 && strcmp(argvMat[0][0], "prompt") == 0)
     {
-        free(prompt_name); // Free the previous prompt name memor
+        free(prompt_name);
         prompt_name = malloc(strlen(argvMat[0][argc1 - 1]) + 1);
         if (prompt_name == NULL)
         {
@@ -637,10 +675,8 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
             exit(EXIT_FAILURE);
         }
         strcpy(prompt_name, argvMat[0][argc1 - 1]);
-
         *need_fork = 0;
     }
-
     else if (argc1 > 1 && strcmp(argvMat[0][0], "echo") == 0)
     {
         if (strcmp(argvMat[0][1], "$?") == 0)
@@ -702,6 +738,85 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
     }
 }
 
+void handle_pipes(char ****argv, int argc, int argv_count) {
+    int piping = 0, retid, status;
+    int fildes[2];
+    int fildes_prev[2];
+    for (int i = 0; i < argv_count; i++) {
+        if (i < argv_count - 1) {
+            // Create a pipe
+            if (pipe(fildes) == -1) {
+                perror("pipe");
+                exit(1);
+            }
+        }
+
+        // Fork a child process
+        pid_t pid = fork();
+        if (pid == 0) {
+            // Child process
+            if (i > 0) {
+                // Redirect input from the previous pipe
+                dup2(fildes_prev[0], STDIN_FILENO);
+                close(fildes_prev[0]);
+                close(fildes_prev[1]);
+            }
+            if (i < argv_count - 1) {
+                // Redirect output to the next pipe
+                close(fildes[0]);
+                dup2(fildes[1], STDOUT_FILENO);
+                close(fildes[1]);
+            }
+
+            // Handle output redirection
+            if (redirect_out) {
+                int fd = creat(outfile, 0660);
+                close(STDOUT_FILENO);
+                dup(fd);
+                close(fd);
+            } else if (redirect_err) {
+                int fd_err = creat(errfile, 0660);
+                close(STDERR_FILENO);
+                dup(fd_err);
+                close(fd_err);
+            } else if (redirect_out_app) {
+                int fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
+                close(STDOUT_FILENO);
+                dup(fd);
+                close(fd);
+            }
+
+            if (execvp(argv[i][0], argv[i]) == -1) {
+                fprintf(stderr, "Command execution failed: %s\n", strerror(errno));
+                exit(errno);
+            }
+        } else if (pid > 0) {
+            // Parent process
+            if (i > 0) {
+                // Close the previous pipe
+                close(fildes_prev[0]);
+                close(fildes_prev[1]);
+            }
+            if (i < argv_count - 1) {
+                // Save the current pipe for the next iteration
+                fildes_prev[0] = fildes[0];
+                fildes_prev[1] = fildes[1];
+            }
+
+            // Wait for the child process to finish
+            if (!amper) {
+                waitpid(pid, &status, 0);
+                last_exit_status = WEXITSTATUS(status);
+            } else {
+                printf("Process with PID %d is running in the background\n", pid);
+            }
+        } else {
+            perror("fork");
+            exit(1);
+        }
+    }
+}
+
 int main()
 {
     char ***argv;
@@ -744,7 +859,7 @@ int main()
         int argc[MAX_SUBCOMMAND_COUNTER] = {0};
         int argv_count;
         int needfork = 1;
-        /////////
+
         read_input_with_history(command, prompt_name);
 
         parse_command(command, &argv, &piping, argc, &argv_count);
@@ -762,10 +877,7 @@ int main()
                 execute_if_else(&argv, argc[0]);
                 needfork = 0;
             }
-            // printf("%s\n",argv[0][0]);
-            // printf("%s\n",argv[0][1]);
-            // printf("%s\n",argv[0][2]);
-            
+
             if (i < argv_count - 1)
             {
                 // Create a pipe
@@ -788,7 +900,6 @@ int main()
                 // Child process
                 if (i > 0)
                 {
-                    perror("i am here 1");
                     // Redirect input from the previous pipe
                     dup2(fildes_prev[0], STDIN_FILENO);
                     close(fildes_prev[0]);
@@ -796,7 +907,6 @@ int main()
                 }
                 if (i < argv_count - 1)
                 {
-                    perror("i am here 2");
                     // Redirect output to the next pipe
                     close(fildes[0]);
                     dup2(fildes[1], STDOUT_FILENO);
@@ -806,7 +916,6 @@ int main()
                 // Handle output redirection
                 if (redirect_out)
                 {
-                    perror("i am here 3");
                     fd = creat(outfile, 0660);
                     close(STDOUT_FILENO);
                     dup(fd);
@@ -814,7 +923,6 @@ int main()
                 }
                 else if (redirect_err)
                 {
-                    perror("i am here 4");
                     fd_err = creat(errfile, 0660);
                     close(STDERR_FILENO);
                     dup(fd_err);
@@ -822,7 +930,6 @@ int main()
                 }
                 else if (redirect_out_app)
                 {
-                    perror("i am here 5");
                     fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
                     close(STDOUT_FILENO);
                     dup(fd);
