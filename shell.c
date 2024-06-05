@@ -187,15 +187,12 @@ void argvAllocate(char ****argv)
     }
 }
 
-void parse_command(char *command, char ****argv, int *piping, int *argc, int *argv_count)
+void parse_command(char *command, char ****argv, int *argc, int *argv_count)
 {
     int num_tokens;
     char ***argvArray = *argv;
     char **commands = split_string(command, '|', &num_tokens);
-    if (num_tokens > 1)
-    {
-        *piping = 1;
-    }
+
     *argv_count = num_tokens;
     for (int i = 0; i < num_tokens; i++)
     {
@@ -379,6 +376,9 @@ void read_input_with_history(char *command, const char *prompt_name)
 
 void handle_pipes(char ***argv, int *argc, int argv_count)
 {
+    //if ls | wc then echo bar else echo for fi
+    printf("argv[0]: \n",argv[0][0]);
+    printf("argv[1]: \n",argv[1][0]);
     int fildes[2];
     int fildes_prev[2];
     int status;
@@ -541,31 +541,40 @@ void execute_if_else(char* command)
     }
     condition_argv[then_index - 1] = NULL;
     
+    int argc1[MAX_SUBCOMMAND_COUNTER] = {0};
+    int argv_count;
+    char ***argv;
     
+
+    parse_command(condition_argv, &argv, argc1, &argv_count);
+    printf("argv[0]: \n",argv[0][0]);
+    printf("argv[1]: \n",argv[1][0]);
+    exit(1);
     // Execute the condition command
-    int status;
-    pid_t pid = fork();
-    if (pid == 0)
-    {
+    handle_pipes(argv,argc1,argv_count);
 
-        execvp(condition_argv[0], condition_argv);
-        perror("execvp failed");
-        exit(EXIT_FAILURE);
-    }
-    else if (pid > 0)
-    {
-        waitpid(pid, &status, 0);
-    }
-    else
-    {
-        perror("fork failed");
-        return;
-    }
-
+    // int status;
+    // pid_t pid = fork();
+    // if (pid == 0)
+    // {
+    //     execvp(condition_argv[0], condition_argv);
+    //     perror("execvp failed");
+    //     exit(EXIT_FAILURE);
+    // }
+    // else if (pid > 0)
+    // {
+    //     waitpid(pid, &status, 0);
+    // }
+    // else
+    // {
+    //     perror("fork failed");
+    //     return;
+    // }
+    
     // Check the condition command's exit status
-    if (WIFEXITED(status))
+    if (last_exit_status)
     {
-        int condition_exit_status = WEXITSTATUS(status);
+        int condition_exit_status = last_exit_status;
         if (condition_exit_status == 0)
         {
             // Condition is true
@@ -862,7 +871,7 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
 int main()
 {
     char ***argv;
-    int piping = 0, retid, status;
+    int  retid, status;
     int fd, fd_err;
 
     prompt_name = malloc(strlen("hello") + 1);
@@ -890,7 +899,6 @@ int main()
 
     while (1)
     {
-        piping = 0;
         // Register the signal handler for SIGINT
         signal(SIGINT, handle_sigint);
         command[MAX_COMMAND_LENGTH - 1] = '\0'; // Remove trailing newline
@@ -902,7 +910,7 @@ int main()
 
         read_input_with_history(command, prompt_name);
 
-        parse_command(command, &argv, &piping, argc, &argv_count);
+        parse_command(command, &argv, argc, &argv_count);
 
         // Check if the command is empty
         if (argv[0][0] == NULL)
