@@ -16,7 +16,7 @@ int variable_count = 0;
 // Global variable to store the exit status of the last executed command
 int last_exit_status = 0;
 
-// Global variables to be reached from each function needed
+// Global variables to be reached from any function needed
 int amper, redirect_out, redirect_err, redirect_out_app;
 char *outfile, *errfile;
 
