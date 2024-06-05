@@ -375,9 +375,8 @@ void read_input_with_history(char *command, const char *prompt_name)
     disable_raw_mode();
 }
 
-void handle_pipes(char ***argv, int *argc, int argv_count)
+void handle_pipes(char ***argv, int argv_count)
 {
-    // if ls | wc then echo bar else echo for fi
     int fildes[2];
     int fildes_prev[2];
     int status;
@@ -456,10 +455,6 @@ void handle_pipes(char ***argv, int *argc, int argv_count)
                 fildes_prev[0] = fildes[0];
                 fildes_prev[1] = fildes[1];
             }
-
-            // ls
-            // if true then !! else echo bar fi
-            // work without fi
 
             // Wait for the child process to finish
             if (!amper)
@@ -542,7 +537,6 @@ void execute_if_else(char *command)
             strcat(condition, " ");
         }
     }
-    // condition[then_index - 1] = '\0';
 
     int argc1[MAX_SUBCOMMAND_COUNTER] = {0};
     int argv_count;
@@ -565,7 +559,7 @@ void execute_if_else(char *command)
     close(fd);
 
     // // Execute the condition command
-    handle_pipes(argv, argc1, argv_count);
+    handle_pipes(argv, argv_count);
 
     // Check the condition command's exit status
     if (WIFEXITED(last_exit_status))
@@ -867,8 +861,6 @@ void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
 int main()
 {
     char ***argv;
-    int retid, status;
-    int fd, fd_err;
 
     prompt_name = malloc(strlen("hello") + 1);
     if (prompt_name == NULL)
@@ -899,7 +891,6 @@ int main()
         signal(SIGINT, handle_sigint);
         command[MAX_COMMAND_LENGTH - 1] = '\0'; // Remove trailing newline
 
-        int num_tokens;
         int argc[MAX_SUBCOMMAND_COUNTER] = {0};
         int argv_count;
         int needfork = 1;
@@ -916,7 +907,6 @@ int main()
         if (argc[0] > 0 && strcmp(argv[0][0], "if") == 0)
         {
             execute_if_else(command);
-
             needfork = 0;
         }
 
@@ -929,7 +919,7 @@ int main()
         }
 
         // Handle the piping commands
-        handle_pipes(argv, argc, argv_count);
+        handle_pipes(argv, argv_count);
     }
 
     // Close the original stderr file descriptor
