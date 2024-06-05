@@ -8,7 +8,7 @@ CFLAGS = -Wall -Wextra -pedantic -std=c11
 TARGET = shell
 
 # Define the source files
-SRCS = shell.c
+SRCS = shell.c shell.h
 
 # Define the object files
 OBJS = $(SRCS:.c=.o)

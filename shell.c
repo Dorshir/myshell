@@ -1,63 +1,45 @@
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <signal.h>
-#include <termios.h>
-#include <ctype.h>
-
-#define MAX_ARG_COUNT 10          // max pipes
-#define MAX_COMMAND_LENGTH 1024   // command length
-#define MAX_SUBCOMMAND_LENGTH 480 // subcommand length
-#define MAX_SUBCOMMAND_COUNTER 10 // subcommand counter
-
-#define MAX_HISTORY_SIZE 20
-#define UP_ARROW 65
-#define DOWN_ARROW 66
-#define ESCAPE_KEY 27
-#define BACKSPACE 127
-
-void expand_commands(char ****argv, int *need_fork, int *argc, char *command);
+#include "shell.h"
 
 // Global variables to hold process IDs
 pid_t pid = -1;
 pid_t pipe_pid = -1;
 
-int flag = 1;
+// Global struct and variables to store user variables
 typedef struct
 {
     char name[MAX_COMMAND_LENGTH];
     char value[MAX_COMMAND_LENGTH];
 } Variable;
-
 Variable variables[MAX_ARG_COUNT];
 int variable_count = 0;
 
 // Global variable to store the exit status of the last executed command
 int last_exit_status = 0;
 
+// Global variables to be reached from each function needed
+int amper, redirect_out, redirect_err, redirect_out_app;
+char *outfile, *errfile;
+
+// Global variables to be handle history of commands
 char command_history[MAX_HISTORY_SIZE][MAX_COMMAND_LENGTH];
 int history_count = 0;
 int current_history_index = -1;
-
-struct termios orig_termios;
-
 char command[MAX_COMMAND_LENGTH];
 char curr_command[MAX_COMMAND_LENGTH];
 char last_command[MAX_COMMAND_LENGTH] = "";
-int amper, redirect_out, redirect_err, redirect_out_app;
-char *outfile, *errfile;
+
+// Global variable to store prompt name
 char *prompt_name;
 
+struct termios orig_termios;
+
+// Disables raw mode and restores original terminal settings
 void disable_raw_mode()
 {
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
 }
 
+// Enables raw mode for the terminal to handle each keystroke directly
 void enable_raw_mode()
 {
     tcgetattr(STDIN_FILENO, &orig_termios);
@@ -71,11 +53,13 @@ void enable_raw_mode()
     tcsetattr(STDIN_FILENO, TCSANOW, &raw);
 }
 
+// Prints the exit status of the last executed command
 void print_status()
 {
     printf("Last command exit status: %d\n", last_exit_status);
 }
 
+// Signal handler for SIGINT (Ctrl+C), prints a message and attempts to kill child processes
 void handle_sigint()
 {
     printf("\nYou typed Control-C!\n");
@@ -174,6 +158,7 @@ char **split_string(const char *str, const char delimiter, int *num_tokens)
     return tokens;
 }
 
+// Allocates memory for a 3D array of strings to store multiple commands and arguments
 void argvAllocate(char ****argv)
 {
     char ***argvVal = *argv;
@@ -187,33 +172,27 @@ void argvAllocate(char ****argv)
     }
 }
 
+// Parses a command string into individual commands and arguments, updating argc and argv_count
 void parse_command(char *command, char ****argv, int *argc, int *argv_count)
 {
     int num_tokens;
     char ***argvArray = *argv;
-    printf("Command: %s\n", command);
     char **commands = split_string(command, '|', &num_tokens);
 
     *argv_count = num_tokens;
     for (int i = 0; i < num_tokens; i++)
     {
-        printf("Command %d: %s\n", i + 1, commands[i]);
-
         // Tokenize each command by spaces
         int num_subtokens;
 
         argvArray[i] = split_string(commands[i], ' ', &num_subtokens);
         argc[i] = num_subtokens;
-        for (int j = 0; j < num_subtokens; j++)
-        {
-            printf("  Subtoken [%d][%d]: %s\n", i, j, argvArray[i][j]);
-        }
-        // free(subtokens); // Free the memory allocated for subtokens
     }
 
     free(commands); // Free the memory allocated for commands
 }
 
+// Retrieves the value of a shell variable given its name
 char *get_variable_value(const char *name)
 {
     for (int i = 0; i < variable_count; i++)
@@ -226,6 +205,7 @@ char *get_variable_value(const char *name)
     return NULL;
 }
 
+// Sets the value of a shell variable, adding it if it does not exist
 void set_variable_value(const char *name, const char *value)
 {
     // check if variable already exist
@@ -250,6 +230,7 @@ void set_variable_value(const char *name, const char *value)
     }
 }
 
+// Adds a command to the history, shifting the oldest commands if the history is full
 void add_to_history(const char *command)
 {
     if (history_count < MAX_HISTORY_SIZE)
@@ -269,6 +250,7 @@ void add_to_history(const char *command)
     current_history_index = history_count;
 }
 
+// Displays a command from the history at the current history index
 void display_command_from_history(char *command, const char *prompt_name)
 {
     if (current_history_index >= 0 && current_history_index < history_count)
@@ -279,6 +261,7 @@ void display_command_from_history(char *command, const char *prompt_name)
     }
 }
 
+// Handles arrow key presses to navigate through command history and updates the current command
 void handle_arrow_key_press(int key, char *command, const char *prompt_name)
 {
     if (key == UP_ARROW)
@@ -309,6 +292,7 @@ void handle_arrow_key_press(int key, char *command, const char *prompt_name)
     }
 }
 
+// Reads user input with command history navigation support, storing the input in the command buffer
 void read_input_with_history(char *command, const char *prompt_name)
 {
     enable_raw_mode();
@@ -316,7 +300,7 @@ void read_input_with_history(char *command, const char *prompt_name)
     int pos = 0;
     memset(command, 0, MAX_COMMAND_LENGTH);
 
-    printf("%s: ", prompt_name);
+    printf("%s ", prompt_name);
     fflush(stdout);
 
     while (1)
@@ -375,6 +359,7 @@ void read_input_with_history(char *command, const char *prompt_name)
     disable_raw_mode();
 }
 
+// Handles the execution of commands connected by pipes, setting up file descriptors and forking processes
 void handle_pipes(char ***argv, int argv_count)
 {
     int fildes[2];
@@ -462,10 +447,6 @@ void handle_pipes(char ***argv, int argv_count)
                 waitpid(pid, &status, 0);
                 last_exit_status = status;
             }
-            else
-            {
-                printf("Process with PID %d is running in the background\n", pid);
-            }
         }
         else
         {
@@ -475,9 +456,9 @@ void handle_pipes(char ***argv, int argv_count)
     }
 }
 
+// Parses and executes a simple if-else command structure within the shell
 void execute_if_else(char *command)
 {
-    printf("command : %s\n", command);
     int argc;
     char **argv1 = split_string(command, ' ', &argc);
 
@@ -550,7 +531,6 @@ void execute_if_else(char *command)
     }
     argvAllocate(&argv);
 
-    printf("Condition: %s\n", condition);
     parse_command(condition, &argv, argc1, &argv_count);
 
     // Redirect stdout so it wont be presented
@@ -713,6 +693,7 @@ void execute_if_else(char *command)
     }
 }
 
+// Expands shell-specific commands or variables in the given command string and updates argv
 void expand_commands(char ****argv, int *need_fork, int *argc, char *command)
 {
     char ***argvMat = *argv;
@@ -862,7 +843,7 @@ int main()
 {
     char ***argv;
 
-    prompt_name = malloc(strlen("hello") + 1);
+    prompt_name = malloc(strlen("hello:") + 1);
     if (prompt_name == NULL)
     {
         perror("Memory allocation failed");
@@ -877,7 +858,7 @@ int main()
     }
     argvAllocate(&argv);
 
-    strcpy(prompt_name, "hello");
+    strcpy(prompt_name, "hello:");
 
     // Save the original stderr file descriptor
     int original_stderr = dup(STDERR_FILENO);
