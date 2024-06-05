@@ -533,13 +533,39 @@ void execute_if_else(char *command)
 
     parse_command(condition, &argv, argc1, &argv_count);
 
-    // Redirect stdout so it wont be presented
-    int fd = creat(outfile, 0660);
-    dup2(fd, STDOUT_FILENO);
-    close(fd);
+    int fd;
+    int po;
+    // Expand commands
+    expand_commands(&argv, &po, argc1, condition);
+
+    int original_stdout = dup(STDOUT_FILENO);
+
+    // Handle output redirection
+    if (redirect_out)
+    {
+        fd = creat(outfile, 0660);
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+    else if (redirect_err)
+    {
+        fd = creat(errfile, 0660);
+        dup2(fd, STDERR_FILENO);
+        close(fd);
+    }
+    else if (redirect_out_app)
+    {
+        fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
 
     // // Execute the condition command
     handle_pipes(argv, argv_count);
+
+    // Restore the original file descriptor of stdout
+    dup2(original_stdout, STDOUT_FILENO);
+    close(original_stdout);
 
     // Check the condition command's exit status
     if (WIFEXITED(last_exit_status))
