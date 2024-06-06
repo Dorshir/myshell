@@ -29,18 +29,18 @@ This is a custom shell program written in C that supports various features such 
 ## Compilation
 
 To compile the shell program, use the following command:
+```
 make
+```
 
 # Usage
 To run the shell, execute:
-
 ```
 ./myshell
 ```
 
 # Examples
 ## Basic Commands and Redirection
-
 ```
 hello: ls -l
 hello: ls -l > file
@@ -48,7 +48,7 @@ hello: ls -l >> file
 hello: ls no_such_file 2> error.log
 ```
 
-# Built-in Commands
+## Built-in Commands
 ```
 hello: prompt = myprompt
 myprompt: echo abc xyz
@@ -59,26 +59,26 @@ myprompt: !!
 myprompt: quit
 ```
 
-# Background Execution
+## Background Execution
 ```
 hello: sleep 5 &
 ```
 
-# Using Variables
+## Using Variables
 ```
 hello: $filename = "testfile.txt"
 hello: echo "This is a test" > $filename
 hello: cat $filename
 ```
 
-# Read Command
+## Read Command
 ```
 hello: echo Enter your name:
 hello: read username
 hello: echo "Hello, $username!"
 ```
 
-# Flow Control (If/Else)
+## Flow Control (If/Else)
 ```
 hello: if grep -q "pattern" file.txt
 hello: then
@@ -88,14 +88,12 @@ hello: echo "Pattern not found"
 hello: fi
 ```
 
-# Piping Commands
+## Piping Commands
 ```
 hello: cat file.txt | grep "search" | sort | uniq
 ```
 
-Notes
-* Use Control-C to test the custom signal handling.
+**Notes:**
+* Use `Ctrl + C` to test the custom signal handling(eliminate child processes but not the parent).
 * Navigate through command history using the up and down arrow keys.
-* The shell does not support all features of a full Unix shell but provides a simplified environment for learning and testing.
-* The if command is actuallize in one row(as in the examples above) and not row after row.
-
+* The `if` command is actuallize in one row(as in the examples above).
